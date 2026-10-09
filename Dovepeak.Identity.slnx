@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/services/" />
+  <Folder Name="/services/management-api/" />
+  <Folder Name="/services/management-api/src/">
+    <Project Path="services/management-api/src/Dovepeak.Identity.ManagementApi/Dovepeak.Identity.ManagementApi.csproj" />
+  </Folder>
+  <Folder Name="/services/management-api/tests/">
+    <Project Path="services/management-api/tests/Dovepeak.Identity.ManagementApi.Tests/Dovepeak.Identity.ManagementApi.Tests.csproj" />
+  </Folder>
+</Solution>

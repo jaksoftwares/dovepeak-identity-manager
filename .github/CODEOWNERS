@@ -1,0 +1,13 @@
+# Replace @dovepeak/maintainers and @dovepeak/security with the real GitHub teams
+# once the organization is created.
+
+*                                   @dovepeak/maintainers
+
+# Security-sensitive areas require security team review
+/identity/                          @dovepeak/security
+/services/management-api/           @dovepeak/maintainers @dovepeak/security
+/deploy/                            @dovepeak/security
+/.github/workflows/                 @dovepeak/security
+/docs/adr/                          @dovepeak/maintainers
+/docs/security/                     @dovepeak/security
+SECURITY.md                         @dovepeak/security

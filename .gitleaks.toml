@@ -1,0 +1,9 @@
+# Gitleaks configuration: default rules plus allowlisted local-development placeholders.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local development placeholder credentials (all end in _local_only and are never valid outside the local stack)"
+regexes = [
+  '''[a-z]+_local_only''',
+]

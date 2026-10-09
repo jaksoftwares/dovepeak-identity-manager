@@ -14,7 +14,7 @@ services:
       DOVEPEAK_DB_PASSWORD: ${DOVEPEAK_DB_PASSWORD:?Copy .env.example to .env}
       KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Copy .env.example to .env}
     ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5442}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./deploy/local/postgres/init:/docker-entrypoint-initdb.d:ro

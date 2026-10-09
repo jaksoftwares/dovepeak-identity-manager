@@ -1,0 +1,20 @@
+# Architecture Decision Records
+
+This directory records significant architectural decisions for Dovepeak Identity.
+
+## Process
+
+1. Copy [template.md](template.md) to `NNNN-short-title.md` using the next number.
+2. Open a pull request with status **Proposed**.
+3. Once approved, set the status to **Accepted** and merge.
+4. Accepted ADRs are never rewritten. To change a decision, write a new ADR and mark the old one **Superseded by ADR-NNNN**.
+
+## Index
+
+| ADR                                                    | Title                                     | Status                                   |
+| ------------------------------------------------------ | ----------------------------------------- | ---------------------------------------- |
+| [0001](0001-identity-engine-selection.md)              | Identity engine selection                 | Proposed (pending Phase 1 validation)    |
+| [0002](0002-identity-ownership-and-sharing.md)         | Identity ownership and sharing model      | Proposed                                 |
+| [0003](0003-token-lifetime-and-revocation.md)          | Token lifetime and revocation semantics   | Proposed                                 |
+| [0004](0004-credential-types.md)                       | Credential types and handling             | Proposed                                 |
+| [0005](0005-cache-engine-valkey.md)                    | Cache and transient state engine          | Proposed                                 |

@@ -79,9 +79,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** —
 
-- [ ] Create the monorepo with the agreed layout (`/docs`, `/services`, `/identity`, `/portal`, `/sdks`, `/examples`, `/deploy`, `/tests`, `/branding`).
-- [ ] Add `LICENSE` (Apache-2.0), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md`.
-- [ ] Add pull request and issue templates.
+- [x] Create the monorepo with the agreed layout (`/docs`, `/services`, `/identity`, `/portal`, `/sdks`, `/examples`, `/deploy`, `/tests`, `/branding`).
+- [x] Add `LICENSE` (Apache-2.0), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `SECURITY.md`.
+- [x] Add pull request and issue templates.
 - [ ] Define branch protection rules and the branching strategy.
 - [ ] Create GitHub milestones matching this document.
 
@@ -91,11 +91,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M0.1
 
-- [ ] GitHub Actions workflow for build, lint and unit tests.
-- [ ] CodeQL static analysis.
-- [ ] Trivy dependency and container scanning.
-- [ ] Gitleaks secret scanning.
-- [ ] Dependabot configuration.
+- [x] GitHub Actions workflow for build, lint and unit tests.
+- [x] CodeQL static analysis.
+- [x] Trivy dependency and container scanning.
+- [x] Gitleaks secret scanning.
+- [x] Dependabot configuration.
 - [ ] Merging is blocked on any failing check.
 
 **Done when:** a pull request with a planted test secret is blocked by CI.
@@ -104,10 +104,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M0.2
 
-- [ ] Docker Compose with PostgreSQL, Redis, Keycloak and Mailpit.
-- [ ] Management API skeleton with `/health` and `/ready` endpoints.
-- [ ] `.env.example` with no real secrets.
-- [ ] README "Getting started" section.
+- [x] Docker Compose with PostgreSQL, Redis, Keycloak and Mailpit.
+- [x] Management API skeleton with `/health` and `/ready` endpoints.
+- [x] `.env.example` with no real secrets.
+- [x] README "Getting started" section.
 
 **Done when:** a new engineer runs the full stack from the README alone in under 30 minutes.
 
@@ -115,11 +115,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M0.3
 
-- [ ] ADR-001 Identity engine selection.
-- [ ] ADR-002 Identity ownership and sharing model.
-- [ ] ADR-003 Token lifetime and revocation semantics.
-- [ ] ADR-004 Credential types.
-- [ ] Initial STRIDE threat model with trust-boundary diagram.
+- [x] ADR-001 Identity engine selection.
+- [x] ADR-002 Identity ownership and sharing model.
+- [x] ADR-003 Token lifetime and revocation semantics.
+- [x] ADR-004 Credential types.
+- [x] Initial STRIDE threat model with trust-boundary diagram.
 
 **Done when:** all ADRs and the threat model are reviewed and merged into `/docs`.
 

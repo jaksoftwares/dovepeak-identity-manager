@@ -21,5 +21,8 @@ FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine AS runtime
 WORKDIR /app
 COPY --from=build /out/efbundle .
 
+# Npgsql loads GSSAPI (Kerberos) support on startup; Alpine does not include it by default.
+RUN apk add --no-cache krb5-libs
+
 USER $APP_UID
 ENTRYPOINT ["./efbundle"]

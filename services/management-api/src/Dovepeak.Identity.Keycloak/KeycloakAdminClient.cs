@@ -102,6 +102,124 @@ public sealed class KeycloakAdminClient(
         await EnsureSuccessAsync(response, $"update realm '{realm}'").ConfigureAwait(false);
     }
 
+    // ---------------------------------------------------------------- Client scopes (OAuth scopes)
+
+    /// <summary>Desired representation of an application-defined OAuth scope: carried in the token's "scope" claim, no consent screen.</summary>
+    public static JsonObject ClientScopeRepresentation(string name, string? description)
+    {
+        var scope = new JsonObject
+        {
+            ["name"] = name,
+            ["protocol"] = "openid-connect",
+            ["attributes"] = new JsonObject
+            {
+                ["include.in.token.scope"] = "true",
+                ["display.on.consent.screen"] = "false",
+            },
+        };
+
+        if (!string.IsNullOrEmpty(description))
+        {
+            scope["description"] = description;
+        }
+
+        return scope;
+    }
+
+    /// <summary>Creates the scope, or returns the existing one's ID (idempotent).</summary>
+    public async Task<string> CreateClientScopeAsync(RealmName realm, string name, string? description, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"admin/realms/{realm}/client-scopes",
+            ClientScopeRepresentation(name, description), cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return (await ListClientScopesAsync(realm, cancellationToken).ConfigureAwait(false))
+                .FirstOrDefault(s => s["name"]?.GetValue<string>() == name)?["id"]?.GetValue<string>()
+                ?? throw new KeycloakAdminException($"Client scope '{name}' reported as existing but was not found.");
+        }
+
+        await EnsureSuccessAsync(response, $"create client scope '{name}'").ConfigureAwait(false);
+        return IdFromLocation(response);
+    }
+
+    public async Task<IReadOnlyList<JsonObject>> ListClientScopesAsync(RealmName realm, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/client-scopes", null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "list client scopes").ConfigureAwait(false);
+        return (await ReadArrayAsync(response, cancellationToken).ConfigureAwait(false)).Select(s => (JsonObject)s!).ToList();
+    }
+
+    public async Task UpdateClientScopeAsync(RealmName realm, string id, JsonObject representation, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Put, $"admin/realms/{realm}/client-scopes/{id}", representation, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "update client scope").ConfigureAwait(false);
+    }
+
+    public async Task DeleteClientScopeAsync(RealmName realm, string id, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Delete, $"admin/realms/{realm}/client-scopes/{id}", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            await EnsureSuccessAsync(response, "delete client scope").ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Client scopes assigned to a client, by name with the scope ID as value. Optional scopes are included in a token
+    /// only when requested; default scopes always are.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>> GetAssignedClientScopesAsync(
+        RealmName realm, string clientId, ClientScopeAssignment assignment, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/clients/{clientId}/{Path(assignment)}", null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "read client scopes").ConfigureAwait(false);
+        return (await ReadArrayAsync(response, cancellationToken).ConfigureAwait(false))
+            .ToDictionary(s => s!["name"]!.GetValue<string>(), s => s!["id"]!.GetValue<string>(), StringComparer.Ordinal);
+    }
+
+    public async Task SetClientScopeAssignmentAsync(
+        RealmName realm, string clientId, string scopeId, ClientScopeAssignment assignment, bool assigned, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(assigned ? HttpMethod.Put : HttpMethod.Delete,
+            $"admin/realms/{realm}/clients/{clientId}/{Path(assignment)}/{scopeId}", null, cancellationToken).ConfigureAwait(false);
+        if (assigned || response.StatusCode != HttpStatusCode.NotFound)
+        {
+            await EnsureSuccessAsync(response, assigned ? "assign client scope" : "unassign client scope").ConfigureAwait(false);
+        }
+    }
+
+    private static string Path(ClientScopeAssignment assignment) =>
+        assignment == ClientScopeAssignment.Optional ? "optional-client-scopes" : "default-client-scopes";
+
+    // ---------------------------------------------------------------- Client policies
+
+    /// <summary>The realm's own client profiles (excluding Keycloak's global ones), as <c>{"profiles": [...]}</c>.</summary>
+    public Task<JsonObject> GetClientProfilesAsync(RealmName realm, CancellationToken cancellationToken) =>
+        GetObjectAsync($"admin/realms/{realm}/client-policies/profiles", "read client profiles", cancellationToken);
+
+    public Task UpdateClientProfilesAsync(RealmName realm, JsonObject profiles, CancellationToken cancellationToken) =>
+        PutAsync($"admin/realms/{realm}/client-policies/profiles", profiles, "update client profiles", cancellationToken);
+
+    /// <summary>The realm's client policies, as <c>{"policies": [...]}</c>.</summary>
+    public Task<JsonObject> GetClientPoliciesAsync(RealmName realm, CancellationToken cancellationToken) =>
+        GetObjectAsync($"admin/realms/{realm}/client-policies/policies", "read client policies", cancellationToken);
+
+    public Task UpdateClientPoliciesAsync(RealmName realm, JsonObject policies, CancellationToken cancellationToken) =>
+        PutAsync($"admin/realms/{realm}/client-policies/policies", policies, "update client policies", cancellationToken);
+
+    private async Task<JsonObject> GetObjectAsync(string path, string operation, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, operation).ConfigureAwait(false);
+        return await ReadObjectAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task PutAsync(string path, JsonObject body, string operation, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Put, path, body, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, operation).ConfigureAwait(false);
+    }
+
     // ---------------------------------------------------------------- Clients
 
     public async Task<ProvisionedClient> CreateClientAsync(RealmName realm, ClientRegistration registration, CancellationToken cancellationToken)
@@ -306,6 +424,36 @@ public sealed class KeycloakAdminClient(
         await EnsureSuccessAsync(response, "regenerate client secret").ConfigureAwait(false);
         var body = await ReadObjectAsync(response, cancellationToken).ConfigureAwait(false);
         return body["value"]!.GetValue<string>();
+    }
+
+    /// <summary>
+    /// When the previous secret stops being accepted, or null if there is none. With the realm's secret-rotation policy
+    /// a regenerated secret keeps the old one valid for the overlap period (ADR-0004).
+    /// </summary>
+    public async Task<DateTimeOffset?> GetPreviousSecretExpiryAsync(RealmName realm, string id, CancellationToken cancellationToken)
+    {
+        using var rotated = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/clients/{id}/client-secret/rotated", null, cancellationToken).ConfigureAwait(false);
+        if (rotated.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NoContent)
+        {
+            return null;
+        }
+
+        await EnsureSuccessAsync(rotated, "read rotated client secret").ConfigureAwait(false);
+        var client = await GetClientAsync(realm, id, cancellationToken).ConfigureAwait(false);
+        var expiry = client["attributes"]?["client.secret.rotated.expiration.time"]?.GetValue<string>();
+        return long.TryParse(expiry, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
+    }
+
+    /// <summary>Stops the previous secret from being accepted immediately (for example after a leak).</summary>
+    public async Task RevokePreviousSecretAsync(RealmName realm, string id, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Delete, $"admin/realms/{realm}/clients/{id}/client-secret/rotated", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            await EnsureSuccessAsync(response, "revoke previous client secret").ConfigureAwait(false);
+        }
     }
 
     private async Task<string> GetClientSecretAsync(RealmName realm, string id, CancellationToken cancellationToken)

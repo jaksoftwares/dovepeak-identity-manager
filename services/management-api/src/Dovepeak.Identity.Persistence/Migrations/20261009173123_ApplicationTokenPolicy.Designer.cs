@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Dovepeak.Identity.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Dovepeak.Identity.Persistence.Migrations
 {
     [DbContext(typeof(PlatformDbContext))]
-    partial class PlatformDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009173123_ApplicationTokenPolicy")]
+    partial class ApplicationTokenPolicy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -267,13 +270,6 @@ namespace Dovepeak.Identity.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("redirect_uris");
 
-                    b.PrimitiveCollection<List<string>>("Scopes")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text[]")
-                        .HasColumnName("scopes")
-                        .HasDefaultValueSql("'{}'::text[]");
-
                     b.Property<int?>("SessionIdleTimeoutSeconds")
                         .HasColumnType("integer")
                         .HasColumnName("session_idle_timeout_seconds");
@@ -343,58 +339,6 @@ namespace Dovepeak.Identity.Persistence.Migrations
                         .HasDatabaseName("ix_application_roles_application_id_name");
 
                     b.ToTable("application_roles", (string)null);
-                });
-
-            modelBuilder.Entity("Dovepeak.Identity.Persistence.Tenancy.EnvironmentScope", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("description");
-
-                    b.Property<string>("EngineScopeId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("engine_scope_id");
-
-                    b.Property<Guid>("EnvironmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("environment_id");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("name");
-
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("organization_id");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("project_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_environment_scopes");
-
-                    b.HasIndex("OrganizationId")
-                        .HasDatabaseName("ix_environment_scopes_organization_id");
-
-                    b.HasIndex("EnvironmentId", "Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_environment_scopes_environment_id_name");
-
-                    b.ToTable("environment_scopes", (string)null);
                 });
 
             modelBuilder.Entity("Dovepeak.Identity.Persistence.Tenancy.IdempotencyRecord", b =>
@@ -954,16 +898,6 @@ namespace Dovepeak.Identity.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_application_roles_applications_application_id");
-                });
-
-            modelBuilder.Entity("Dovepeak.Identity.Persistence.Tenancy.EnvironmentScope", b =>
-                {
-                    b.HasOne("Dovepeak.Identity.Persistence.Tenancy.ProjectEnvironment", null)
-                        .WithMany()
-                        .HasForeignKey("EnvironmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_environment_scopes_environments_environment_id");
                 });
 
             modelBuilder.Entity("Dovepeak.Identity.Persistence.Tenancy.OrganizationInvitation", b =>

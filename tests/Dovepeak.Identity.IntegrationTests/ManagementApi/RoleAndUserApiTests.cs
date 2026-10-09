@@ -1,12 +1,7 @@
-extern alias ProtectedApi;
-
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Net.Http.Headers;
 using Dovepeak.Identity.IntegrationTests.Infrastructure;
 using Dovepeak.Identity.Keycloak;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Dovepeak.Identity.IntegrationTests.ManagementApi;
 
@@ -30,18 +25,18 @@ public sealed class RoleAndUserApiTests(ManagementApiFixture api)
         var user = TestUser.Generate();
         var userId = await KeycloakAdmin.Client.CreateUserAsync(realm, user.Email, user.Password, true, CancellationToken.None);
         using var client = new OidcClient(issuer, clientId, null, TestRealm.RedirectUri);
-        using var api2 = ProtectedApiFor(issuer);
+        using var api2 = ExampleApi.For(issuer);
 
         // Without the role: authenticated, but forbidden on the admin endpoint.
         var before = await SignIn.AsAsync(user, client);
-        Assert.Equal(HttpStatusCode.OK, await CallAsync(api2, "/me", before.AccessToken));
-        Assert.Equal(HttpStatusCode.Forbidden, await CallAsync(api2, "/admin", before.AccessToken));
+        Assert.Equal(HttpStatusCode.OK, await ExampleApi.CallAsync(api2, "/me", before.AccessToken));
+        Assert.Equal(HttpStatusCode.Forbidden, await ExampleApi.CallAsync(api2, "/admin", before.AccessToken));
 
         (await scenario.Owner.PutAsync($"{appPath}/roles/administrator/users/{userId}")).Expect(HttpStatusCode.NoContent);
 
         var after = await SignIn.AsAsync(user, client);
         Assert.Contains("administrator", new JwtSecurityToken(after.AccessToken).Claims.Where(c => c.Type == "roles").Select(c => c.Value));
-        Assert.Equal(HttpStatusCode.OK, await CallAsync(api2, "/admin", after.AccessToken));
+        Assert.Equal(HttpStatusCode.OK, await ExampleApi.CallAsync(api2, "/admin", after.AccessToken));
     }
 
     [Fact]
@@ -93,22 +88,5 @@ public sealed class RoleAndUserApiTests(ManagementApiFixture api)
         (await scenario.Owner.DeleteAsync($"{scenario.Development}/users/{userId}/sessions")).Expect(HttpStatusCode.NoContent);
         using var refresh = await client.TryRefreshAsync(tokens.RefreshToken!);
         Assert.False(refresh.IsSuccessStatusCode);
-    }
-
-    private static WebApplicationFactory<ProtectedApi::Program> ProtectedApiFor(Uri issuer) =>
-        new WebApplicationFactory<ProtectedApi::Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseSetting("Auth:Issuer", issuer.ToString());
-            builder.UseSetting("Auth:Audience", "dovepeak-demo-api");
-            builder.UseSetting("Auth:RequireHttpsMetadata", "false");
-        });
-
-    private static async Task<HttpStatusCode> CallAsync(WebApplicationFactory<ProtectedApi::Program> factory, string path, string token)
-    {
-        using var http = factory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, path);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var response = await http.SendAsync(request);
-        return response.StatusCode;
     }
 }

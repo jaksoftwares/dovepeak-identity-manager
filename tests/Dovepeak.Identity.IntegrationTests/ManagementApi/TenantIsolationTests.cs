@@ -4,8 +4,11 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Dovepeak.Identity.IntegrationTests.Infrastructure;
 using Dovepeak.Identity.Keycloak;
+using Dovepeak.Identity.Persistence;
+using Dovepeak.Identity.Persistence.Tenancy;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Dovepeak.Identity.IntegrationTests.ManagementApi;
@@ -43,6 +46,31 @@ public sealed partial class TenantIsolationTests(ManagementApiFixture api)
         Assert.True(v1.Count(e => e.OrganizationScoped) >= 35, $"Only {v1.Count(e => e.OrganizationScoped)} organization endpoints found.");
     }
 
+    /// <summary>
+    /// Row-level security policies are hand-written in migrations (ADR-0008). Every tenant-owned table in the model
+    /// must have RLS enabled and forced, with the tenant_isolation policy, so a new table cannot silently miss it.
+    /// </summary>
+    [Fact]
+    public async Task EveryTenantTable_HasForcedRowLevelSecurity()
+    {
+        await using var scope = api.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var tenantTables = db.Model.GetEntityTypes()
+            .Where(t => typeof(ITenantOwned).IsAssignableFrom(t.ClrType) || t.ClrType == typeof(Organization))
+            .Select(t => t.GetTableName()!)
+            .ToList();
+
+        var protectedTables = await db.Database.SqlQueryRaw<string>("""
+            SELECT c.relname AS "Value"
+            FROM pg_class c
+            JOIN pg_policies p ON p.tablename = c.relname AND p.policyname = 'tenant_isolation'
+            WHERE c.relrowsecurity AND c.relforcerowsecurity
+            """).ToListAsync();
+
+        Assert.True(tenantTables.Count >= 12, $"Only {tenantTables.Count} tenant tables found in the model.");
+        Assert.Empty(tenantTables.Except(protectedTables));
+    }
+
     [Fact]
     public async Task OwnerOfOrganizationA_CannotReachAnythingInOrganizationB()
     {
@@ -66,28 +94,47 @@ public sealed partial class TenantIsolationTests(ManagementApiFixture api)
         await AssertIsolatedAsync(automation, victim);
     }
 
+    /// <summary>
+    /// Negative control: the harness must catch an endpoint that answers without tenant authorization. GET /v1/me
+    /// is such an endpoint (it serves any signed-in developer), so presenting it as organization-scoped must fail.
+    /// </summary>
+    [Fact]
+    public async Task Harness_DetectsAnEndpointWithoutTenantAuthorization()
+    {
+        var (attacker, victim) = await ArrangeAsync();
+
+        var failures = await ProbeAsync(attacker.Owner, victim, [new ApiEndpoint("GET", "/v1/me", OrganizationScoped: true)]);
+
+        Assert.Contains(failures, f => f.StartsWith("GET /v1/me -> 200", StringComparison.Ordinal));
+    }
+
     private async Task AssertIsolatedAsync(ApiClient attacker, Victim victim)
     {
-        var failures = new List<string>();
-        var probed = 0;
+        var endpoints = ApiEndpoints().Where(e => e.OrganizationScoped).ToList();
+        var failures = await ProbeAsync(attacker, victim, endpoints);
 
-        foreach (var endpoint in ApiEndpoints().Where(e => e.OrganizationScoped))
+        Assert.True(endpoints.Count >= 35);
+        Assert.Empty(failures);
+
+        // The victim's resources are intact and still reachable by the victim.
+        (await victim.Owner.GetAsync($"/v1/organizations/{victim.Values["orgId"]}/projects/{victim.Values["projectId"]}")).Expect(HttpStatusCode.OK);
+    }
+
+    /// <summary>Calls every endpoint as the attacker with the victim's real IDs; anything other than 404 is a failure.</summary>
+    private static async Task<List<string>> ProbeAsync(ApiClient attacker, Victim victim, IEnumerable<ApiEndpoint> endpoints)
+    {
+        var failures = new List<string>();
+        foreach (var endpoint in endpoints)
         {
             var path = RouteParameter().Replace(endpoint.Route, m => victim.Values[m.Groups[1].Value]);
             var response = await attacker.SendAsync(new HttpMethod(endpoint.Method), path, endpoint.Method is "GET" or "DELETE" ? null : AnyBody);
-            probed++;
-
             if (response.Status != HttpStatusCode.NotFound)
             {
                 failures.Add($"{endpoint.Method} {endpoint.Route} -> {(int)response.Status} {response.Body[..Math.Min(200, response.Body.Length)]}");
             }
         }
 
-        Assert.True(probed >= 35);
-        Assert.Empty(failures);
-
-        // The victim's resources are intact and still reachable by the victim.
-        (await victim.Owner.GetAsync($"/v1/organizations/{victim.Values["orgId"]}/projects/{victim.Values["projectId"]}")).Expect(HttpStatusCode.OK);
+        return failures;
     }
 
     private async Task<(Scenario Attacker, Victim Victim)> ArrangeAsync()
@@ -95,6 +142,7 @@ public sealed partial class TenantIsolationTests(ManagementApiFixture api)
         var attacker = await Scenario.CreateAsync(api);
         var victim = await Scenario.CreateAsync(api);
 
+        (await victim.Owner.PostAsync($"{victim.Development}/scopes", new { name = "orders:read" })).Expect(HttpStatusCode.Created);
         var application = await victim.CreateApplicationAsync("web");
         var applicationPath = $"{victim.Development}/applications/{application["application"]!["id"]!.GetValue<string>()}";
         (await victim.Owner.PostAsync($"{applicationPath}/roles", new { name = "administrator" })).Expect(HttpStatusCode.Created);
@@ -113,6 +161,7 @@ public sealed partial class TenantIsolationTests(ManagementApiFixture api)
             ["environmentId"] = victim.DevelopmentId.ToString(),
             ["applicationId"] = application["application"]!["id"]!.GetValue<string>(),
             ["roleName"] = "administrator",
+            ["scopeName"] = "orders:read",
             ["invitationId"] = invitation["id"]!.GetValue<string>(),
             ["keyId"] = apiKey["apiKey"]!["id"]!.GetValue<string>(),
             ["webhookId"] = webhook["webhook"]!["id"]!.GetValue<string>(),

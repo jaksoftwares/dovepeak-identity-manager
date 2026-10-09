@@ -49,6 +49,7 @@ public static class PlatformServiceCollectionExtensions
         services.AddScoped<ProjectService>();
         services.AddScoped<ApplicationService>();
         services.AddScoped<RoleService>();
+        services.AddScoped<ScopeService>();
         services.AddScoped<ApiKeyService>();
         services.AddScoped<ApiKeyValidator>();
         services.AddScoped<WebhookService>();

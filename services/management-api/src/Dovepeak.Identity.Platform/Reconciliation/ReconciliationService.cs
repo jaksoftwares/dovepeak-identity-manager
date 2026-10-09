@@ -94,6 +94,45 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
             Corrected("realm_settings_restored", string.Join(",", baselineDrift));
         }
 
+        // 1b. Client policies (PKCE, rejected grants, secret rotation) must match the template exactly. Repairs never pass
+        //     through a state with weaker enforcement: missing profiles are added before policies are restored, and
+        //     unknown profiles are removed only once no policy references them.
+        var desiredProfiles = (JsonArray)template.Baseline()["clientProfiles"]!["profiles"]!;
+        var desiredPolicies = (JsonArray)template.Baseline()["clientPolicies"]!["policies"]!;
+        var actualProfiles = (await engine.GetClientProfilesAsync(realm, ct))["profiles"] as JsonArray ?? [];
+        var actualPolicies = (await engine.GetClientPoliciesAsync(realm, ct))["policies"] as JsonArray ?? [];
+        if (!IsSubset(desiredProfiles, actualProfiles) || !IsSubset(desiredPolicies, actualPolicies))
+        {
+            var desiredNames = desiredProfiles.Select(p => p!["name"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+            var union = new JsonArray([.. desiredProfiles.Select(p => p!.DeepClone()),
+                .. actualProfiles.Where(p => !desiredNames.Contains(p!["name"]!.GetValue<string>())).Select(p => p!.DeepClone())]);
+            await engine.UpdateClientProfilesAsync(realm, new JsonObject { ["profiles"] = union }, ct);
+            await engine.UpdateClientPoliciesAsync(realm, new JsonObject { ["policies"] = desiredPolicies.DeepClone() }, ct);
+            await engine.UpdateClientProfilesAsync(realm, new JsonObject { ["profiles"] = desiredProfiles.DeepClone() }, ct);
+            Corrected("client_policies_restored", realm.Value);
+        }
+
+        // 1c. Environment scopes must exist in the engine and stay in the "scope" claim.
+        var scopes = await db.EnvironmentScopes.Where(s => s.EnvironmentId == environmentId).ToListAsync(ct);
+        var engineScopes = (await engine.ListClientScopesAsync(realm, ct)).ToDictionary(s => s["id"]!.GetValue<string>(), StringComparer.Ordinal);
+        foreach (var environmentScope in scopes)
+        {
+            if (environmentScope.EngineScopeId is null || !engineScopes.TryGetValue(environmentScope.EngineScopeId, out var actualScope))
+            {
+                environmentScope.EngineScopeId = await engine.CreateClientScopeAsync(realm, environmentScope.Name, environmentScope.Description, ct);
+                Corrected("scope_recreated", environmentScope.Name);
+                continue;
+            }
+
+            var desiredScope = KeycloakAdminClient.ClientScopeRepresentation(environmentScope.Name, environmentScope.Description);
+            if (!IsSubset(desiredScope, actualScope))
+            {
+                desiredScope["id"] = environmentScope.EngineScopeId;
+                await engine.UpdateClientScopeAsync(realm, environmentScope.EngineScopeId, desiredScope, ct);
+                Corrected("scope_restored", environmentScope.Name);
+            }
+        }
+
         // 2. Every application must exist with exactly its desired configuration.
         var applications = await db.Applications.Where(a => a.EnvironmentId == environmentId).ToListAsync(ct);
         var engineClients = await engine.ListClientsAsync(realm, ct);
@@ -108,15 +147,22 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
                 var created = await engine.CreateClientAsync(realm, registration, ct);
                 application.EngineClientId = created.Id;
                 Corrected("client_recreated", application.ClientId);
-                continue;
+            }
+            else
+            {
+                application.EngineClientId = client["id"]!.GetValue<string>();
+                var differences = ClientDrift(client, registration);
+                if (differences.Count > 0)
+                {
+                    await engine.UpdateClientAsync(realm, application.EngineClientId, registration, ct);
+                    Corrected("client_config_restored", application.ClientId, differences);
+                }
             }
 
-            application.EngineClientId = client["id"]!.GetValue<string>();
-            var differences = ClientDrift(client, registration);
-            if (differences.Count > 0)
+            var scopeChanges = await ScopeService.SyncClientScopesAsync(engine, realm, application.EngineClientId, application.Scopes, scopes, ct);
+            if (scopeChanges.Count > 0)
             {
-                await engine.UpdateClientAsync(realm, application.EngineClientId, registration, ct);
-                Corrected("client_config_restored", application.ClientId, differences);
+                Corrected("client_scopes_restored", application.ClientId, scopeChanges);
             }
         }
 
@@ -134,6 +180,18 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
         await db.SaveChangesAsync(ct);
         return corrections;
     }
+
+    /// <summary>
+    /// True when every value in <paramref name="desired"/> is present in <paramref name="actual"/>. Arrays must have the
+    /// same length (no extra or missing items); objects may carry extra keys that Keycloak adds itself.
+    /// </summary>
+    private static bool IsSubset(JsonNode? desired, JsonNode? actual) => desired switch
+    {
+        null => true,
+        JsonObject o => actual is JsonObject a && o.All(p => a.ContainsKey(p.Key) && IsSubset(p.Value, a[p.Key])),
+        JsonArray d => actual is JsonArray a && d.Count == a.Count && d.Select((item, i) => IsSubset(item, a[i])).All(x => x),
+        _ => actual is JsonValue && actual.ToJsonString() == desired.ToJsonString(),
+    };
 
     private static List<string> ScalarDrift(JsonObject baseline, JsonObject actual) =>
         baseline.Where(p => p.Value is JsonValue && p.Key != "attributes" && actual[p.Key] is { } value
@@ -164,6 +222,12 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
         Check("fullScopeAllowed", actual["fullScopeAllowed"]?.GetValue<bool>() == false);
         Check("enabled", actual["enabled"]?.GetValue<bool>() == true);
         Check("pkce", actual["attributes"]?["pkce.code.challenge.method"]?.GetValue<string>() == "S256");
+        foreach (var (attribute, value) in desired.TokenPolicy.ToAttributes())
+        {
+            // Keycloak treats a missing attribute and an empty one alike: both inherit the realm setting.
+            Check(attribute, (actual["attributes"]?[attribute]?.GetValue<string>() ?? string.Empty) == value);
+        }
+
         return differences;
     }
 

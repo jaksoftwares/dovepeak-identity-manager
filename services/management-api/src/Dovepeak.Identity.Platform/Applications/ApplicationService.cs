@@ -11,20 +11,31 @@ using Microsoft.Extensions.Options;
 
 namespace Dovepeak.Identity.Platform.Applications;
 
+/// <summary>
+/// Token and session lifetimes in seconds. Omitted (null) values inherit the environment's baseline: 600 s access
+/// tokens, 1800 s session idle timeout, 43200 s session maximum.
+/// </summary>
+public sealed record ApplicationTokenPolicy(int? AccessTokenLifetimeSeconds, int? SessionIdleTimeoutSeconds, int? SessionMaxLifetimeSeconds);
+
 public sealed record ApplicationSettings(
     string Name,
     ApplicationKind Kind,
     IReadOnlyList<string>? RedirectUris,
     IReadOnlyList<string>? PostLogoutRedirectUris,
     IReadOnlyList<string>? WebOrigins,
-    IReadOnlyList<string>? Audiences);
+    IReadOnlyList<string>? Audiences,
+    ApplicationTokenPolicy? TokenPolicy = null,
+    IReadOnlyList<string>? Scopes = null);
 
+/// <summary>Partial update. A supplied <see cref="TokenPolicy"/> replaces the whole policy; omitted fields in it revert to the baseline.</summary>
 public sealed record ApplicationUpdate(
     string? Name,
     IReadOnlyList<string>? RedirectUris,
     IReadOnlyList<string>? PostLogoutRedirectUris,
     IReadOnlyList<string>? WebOrigins,
-    IReadOnlyList<string>? Audiences);
+    IReadOnlyList<string>? Audiences,
+    ApplicationTokenPolicy? TokenPolicy = null,
+    IReadOnlyList<string>? Scopes = null);
 
 public sealed record ApplicationView(
     Guid Id,
@@ -37,11 +48,19 @@ public sealed record ApplicationView(
     IReadOnlyList<string> PostLogoutRedirectUris,
     IReadOnlyList<string> WebOrigins,
     IReadOnlyList<string> Audiences,
+    IReadOnlyList<string> Scopes,
+    ApplicationTokenPolicy TokenPolicy,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
 /// <summary>Returned once, when an application is created or its secret is rotated (ADR-0004).</summary>
 public sealed record ApplicationWithSecret(ApplicationView Application, string? ClientSecret);
+
+/// <summary>
+/// A newly issued client secret. The previous secret keeps working until <see cref="PreviousSecretExpiresAt"/> so
+/// deployments can switch without downtime; null means it stopped working immediately.
+/// </summary>
+public sealed record RotatedSecret(ApplicationView Application, string ClientSecret, DateTimeOffset? PreviousSecretExpiresAt);
 
 /// <summary>Everything a client needs to integrate. Never contains secrets (problem statement §16).</summary>
 public sealed record ApplicationConfigView(
@@ -54,7 +73,11 @@ public sealed record ApplicationConfigView(
     IReadOnlyList<string> RedirectUris,
     IReadOnlyList<string> PostLogoutRedirectUris,
     IReadOnlyList<string> WebOrigins,
-    IReadOnlyList<string> Audiences);
+    IReadOnlyList<string> Audiences,
+    IReadOnlyList<string> Scopes,
+    int AccessTokenLifetimeSeconds,
+    int? SessionIdleTimeoutSeconds,
+    int? SessionMaxLifetimeSeconds);
 
 /// <summary>Applications (OAuth clients) inside a project environment (milestones M3.5, M3.6).</summary>
 public sealed class ApplicationService(
@@ -90,11 +113,16 @@ public sealed class ApplicationService(
             PostLogoutRedirectUris = [.. settings.PostLogoutRedirectUris ?? []],
             WebOrigins = [.. settings.WebOrigins ?? []],
             Audiences = [.. settings.Audiences ?? []],
+            Scopes = [.. (settings.Scopes ?? []).Distinct(StringComparer.Ordinal)],
+            AccessTokenLifetimeSeconds = settings.TokenPolicy?.AccessTokenLifetimeSeconds,
+            SessionIdleTimeoutSeconds = settings.TokenPolicy?.SessionIdleTimeoutSeconds,
+            SessionMaxLifetimeSeconds = settings.TokenPolicy?.SessionMaxLifetimeSeconds,
             CreatedAt = now,
             UpdatedAt = now,
         };
 
         var registration = ToRegistration(application);
+        var environmentScopes = await RequireScopesAsync(environmentId, application.Scopes, ct);
         if (await db.Applications.AnyAsync(a => a.EnvironmentId == environmentId && a.Name == application.Name, ct))
         {
             throw PlatformException.Conflict("name_taken", "An application with this name already exists in the environment.");
@@ -106,10 +134,11 @@ public sealed class ApplicationService(
 
         db.Applications.Add(application);
         audit.Record(organizationId, "application.created", "application", application.Id,
-            new { application.Name, application.Kind, application.ClientId, environment = environment.Kind });
+            new { application.Name, application.Kind, application.ClientId, environment = environment.Kind, tokenPolicy = PolicyOf(application) });
 
         try
         {
+            await CallEngineAsync(() => ScopeService.SyncClientScopesAsync(engine, realm, client.Id, application.Scopes, environmentScopes, ct));
             await db.SaveOrConflictAsync(ct, "name_taken", "An application with this name already exists in the environment.");
         }
         catch
@@ -152,10 +181,25 @@ public sealed class ApplicationService(
         application.PostLogoutRedirectUris = update.PostLogoutRedirectUris?.ToList() ?? application.PostLogoutRedirectUris;
         application.WebOrigins = update.WebOrigins?.ToList() ?? application.WebOrigins;
         application.Audiences = update.Audiences?.ToList() ?? application.Audiences;
+        if (update.Scopes is not null)
+        {
+            application.Scopes = [.. update.Scopes.Distinct(StringComparer.Ordinal)];
+        }
+
+        if (update.TokenPolicy is { } policy)
+        {
+            application.AccessTokenLifetimeSeconds = policy.AccessTokenLifetimeSeconds;
+            application.SessionIdleTimeoutSeconds = policy.SessionIdleTimeoutSeconds;
+            application.SessionMaxLifetimeSeconds = policy.SessionMaxLifetimeSeconds;
+        }
+
         application.UpdatedAt = timeProvider.GetUtcNow();
 
         var registration = ToRegistration(application);
-        await CallEngineAsync(() => engine.UpdateClientAsync(RealmName.Parse(environment.RealmName), application.EngineClientId!, registration, ct));
+        var environmentScopes = await RequireScopesAsync(environmentId, application.Scopes, ct);
+        var realm = RealmName.Parse(environment.RealmName);
+        await CallEngineAsync(() => engine.UpdateClientAsync(realm, application.EngineClientId!, registration, ct));
+        await CallEngineAsync(() => ScopeService.SyncClientScopesAsync(engine, realm, application.EngineClientId!, application.Scopes, environmentScopes, ct));
 
         audit.Record(organizationId, "application.updated", "application", application.Id, new
         {
@@ -163,6 +207,8 @@ public sealed class ApplicationService(
             application.PostLogoutRedirectUris,
             application.WebOrigins,
             application.Audiences,
+            application.Scopes,
+            tokenPolicy = PolicyOf(application),
         });
         await db.SaveOrConflictAsync(ct, "name_taken", "An application with this name already exists in the environment.");
         return ToView(application);
@@ -184,10 +230,42 @@ public sealed class ApplicationService(
         await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>Issues a new client secret. The previous secret stops working immediately.</summary>
-    public async Task<ApplicationWithSecret> RotateSecretAsync(Guid organizationId, Guid projectId, Guid environmentId, Guid applicationId, CancellationToken ct)
+    /// <summary>
+    /// Issues a new client secret. By default the previous secret keeps working for the overlap period (24 hours) so
+    /// the application can be redeployed without downtime; <paramref name="revokePrevious"/> ends it immediately,
+    /// which is the right response to a leaked secret.
+    /// </summary>
+    public async Task<RotatedSecret> RotateSecretAsync(Guid organizationId, Guid projectId, Guid environmentId, Guid applicationId, bool revokePrevious, CancellationToken ct)
     {
         await authorizer.AuthorizeAsync(organizationId, Permission.CredentialsManage, ct);
+        var (application, realm) = await ConfidentialApplicationAsync(projectId, environmentId, applicationId, ct);
+
+        var secret = await CallEngineAsync(() => engine.RegenerateClientSecretAsync(realm, application.EngineClientId!, ct));
+        if (revokePrevious)
+        {
+            await CallEngineAsync(() => engine.RevokePreviousSecretAsync(realm, application.EngineClientId!, ct));
+        }
+
+        var previousExpiresAt = revokePrevious ? null : await CallEngineAsync(() => engine.GetPreviousSecretExpiryAsync(realm, application.EngineClientId!, ct));
+        audit.Record(organizationId, "application.secret_rotated", "application", application.Id,
+            new { application.ClientId, previousSecretExpiresAt = previousExpiresAt });
+        await db.SaveChangesAsync(ct);
+        return new RotatedSecret(ToView(application), secret, previousExpiresAt);
+    }
+
+    /// <summary>Ends the overlap period: only the current secret is accepted from now on.</summary>
+    public async Task RevokePreviousSecretAsync(Guid organizationId, Guid projectId, Guid environmentId, Guid applicationId, CancellationToken ct)
+    {
+        await authorizer.AuthorizeAsync(organizationId, Permission.CredentialsManage, ct);
+        var (application, realm) = await ConfidentialApplicationAsync(projectId, environmentId, applicationId, ct);
+
+        await CallEngineAsync(() => engine.RevokePreviousSecretAsync(realm, application.EngineClientId!, ct));
+        audit.Record(organizationId, "application.previous_secret_revoked", "application", application.Id, new { application.ClientId });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<(Application Application, RealmName Realm)> ConfidentialApplicationAsync(Guid projectId, Guid environmentId, Guid applicationId, CancellationToken ct)
+    {
         var application = await FindAsync(projectId, environmentId, applicationId, ct);
         if (application.Kind is ApplicationKind.Spa or ApplicationKind.Native)
         {
@@ -195,11 +273,7 @@ public sealed class ApplicationService(
         }
 
         var environment = await ReadyEnvironmentAsync(projectId, environmentId, ct);
-        var secret = await CallEngineAsync(() => engine.RegenerateClientSecretAsync(RealmName.Parse(environment.RealmName), application.EngineClientId!, ct));
-
-        audit.Record(organizationId, "application.secret_rotated", "application", application.Id, new { application.ClientId });
-        await db.SaveChangesAsync(ct);
-        return new ApplicationWithSecret(ToView(application), secret);
+        return (application, RealmName.Parse(environment.RealmName));
     }
 
     public async Task<ApplicationConfigView> GetConfigAsync(Guid organizationId, Guid projectId, Guid environmentId, Guid applicationId, CancellationToken ct)
@@ -208,6 +282,8 @@ public sealed class ApplicationService(
         var application = await FindAsync(projectId, environmentId, applicationId, ct);
         var environment = await EnvironmentAsync(projectId, environmentId, ct);
         var issuer = ProjectService.Issuer(options.Value, environment.RealmName).TrimEnd('/');
+        var policy = ToRegistration(application).TokenPolicy;
+        var interactive = application.Kind != ApplicationKind.Machine;
 
         return new ApplicationConfigView(
             application.ClientId,
@@ -219,7 +295,11 @@ public sealed class ApplicationService(
             application.RedirectUris,
             application.PostLogoutRedirectUris,
             application.WebOrigins,
-            application.Audiences);
+            application.Audiences,
+            application.Scopes,
+            policy.EffectiveAccessTokenLifetimeSeconds,
+            interactive ? policy.EffectiveSessionIdleTimeoutSeconds : null,
+            interactive ? policy.EffectiveSessionMaxLifetimeSeconds : null);
     }
 
     internal static ClientRegistration ToRegistration(Application application)
@@ -231,6 +311,16 @@ public sealed class ApplicationService(
             _ => ClientKind.Machine,
         };
 
+        var policy = new TokenPolicy(application.AccessTokenLifetimeSeconds, application.SessionIdleTimeoutSeconds, application.SessionMaxLifetimeSeconds);
+        try
+        {
+            policy.Validate(kind);
+        }
+        catch (ArgumentException ex)
+        {
+            throw PlatformException.Invalid("tokenPolicy", ex.Message);
+        }
+
         try
         {
             var registration = new ClientRegistration(application.ClientId, kind)
@@ -240,6 +330,7 @@ public sealed class ApplicationService(
                 PostLogoutRedirectUris = application.PostLogoutRedirectUris.Select(u => ParseUri(u, "postLogoutRedirectUris")).ToList(),
                 WebOrigins = application.WebOrigins.Select(u => ParseUri(u, "webOrigins")).ToList(),
                 Audiences = application.Audiences.Select(ValidateAudience).ToList(),
+                TokenPolicy = policy,
             };
             registration.Validate();
             return registration;
@@ -309,5 +400,18 @@ public sealed class ApplicationService(
 
     internal static ApplicationView ToView(Application a) => new(
         a.Id, a.ProjectId, a.EnvironmentId, a.Name, a.Kind, a.ClientId, a.RedirectUris, a.PostLogoutRedirectUris, a.WebOrigins,
-        a.Audiences, a.CreatedAt, a.UpdatedAt);
+        a.Audiences, a.Scopes, PolicyOf(a), a.CreatedAt, a.UpdatedAt);
+
+    /// <summary>Every requested scope must be defined on the environment first.</summary>
+    private async Task<IReadOnlyList<EnvironmentScope>> RequireScopesAsync(Guid environmentId, IReadOnlyCollection<string> requested, CancellationToken ct)
+    {
+        var defined = await db.EnvironmentScopes.Where(s => s.EnvironmentId == environmentId).ToListAsync(ct);
+        var unknown = requested.Except(defined.Select(s => s.Name), StringComparer.Ordinal).ToList();
+        return unknown.Count == 0
+            ? defined
+            : throw PlatformException.Invalid("scopes", $"Unknown scopes: {string.Join(", ", unknown)}. Define them on the environment first.");
+    }
+
+    private static ApplicationTokenPolicy PolicyOf(Application a) =>
+        new(a.AccessTokenLifetimeSeconds, a.SessionIdleTimeoutSeconds, a.SessionMaxLifetimeSeconds);
 }

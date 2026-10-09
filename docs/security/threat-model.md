@@ -76,7 +76,7 @@ Status: **Verified** = mitigation implemented and covered by automated tests; **
 
 | ID   | Threat                                                         | Boundary | Mitigation                                                                              | Milestone   | Status  |
 | ---- | -------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------- | ----------- | ------- |
-| T-01 | Direct modification of Keycloak configuration bypassing Dovepeak | TB2    | Admin API blocked on the public edge (ADR-0007); reconciliation worker reverts drift   | M2.4, M3.7  | Verified (edge: `EdgeProtectionTests`; drift reverted and audited: `ReconciliationTests`) |
+| T-01 | Direct modification of Keycloak configuration bypassing Dovepeak | TB2    | Admin API blocked on the public edge (ADR-0007); reconciliation worker reverts drift   | M2.4, M3.7  | Verified (edge: `EdgeProtectionTests`; realm settings, client policies (PKCE, grant restrictions, secret rotation), scopes, client configuration and token lifetimes reverted and audited: `ReconciliationTests`, `ScopeApiTests`) |
 | T-02 | CSRF against portal or BFF session cookies                     | TB1      | SameSite cookies, Origin checks on state-changing BFF routes                            | M1.2, M4.1  | Partial (BFF verified by `tests/e2e/bff-smoke.mjs`; portal in M4.1) |
 | T-03 | Webhook payload forgery received by tenant systems             | TB4      | HMAC-signed webhooks with timestamp to prevent replay                                   | M3.9        | Verified (`WebhookSignerTests`, `AuditAndWebhookApiTests`: `Dovepeak-Signature: t=…,v1=…`, 5-minute replay window) |
 

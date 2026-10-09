@@ -54,6 +54,9 @@ public sealed class QuotaOptions
 
     [Range(1, 100)]
     public int WebhooksPerOrganization { get; set; } = 10;
+
+    [Range(1, 500)]
+    public int ScopesPerEnvironment { get; set; } = 50;
 }
 
 public sealed class WebhookOptions

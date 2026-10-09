@@ -175,7 +175,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 - [x] ~~Keycloakify~~ theme using the Dovepeak brand guidelines. *(CSS-only child theme instead; Keycloakify re-evaluated in Phase 4 — ADR-0006.)*
 - [x] Login, registration, verification and recovery pages styled.
-- [ ] Prototype of per-tenant branding (logo and colours). *(Partial: per-tenant name only. Logo and colours moved to Phase 4 — ADR-0006, limitation L-07.)*
+- [ ] Prototype of per-tenant branding (logo and colours). *(Partial: per-tenant name only. Logo and colours are carried to M4.3 — ADR-0006, limitation L-07.)*
 
 **Done when:** two realms display different branding from the same theme.
 
@@ -215,9 +215,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 **Depends on:** M2.1
 
 - [x] Configurable SMTP provider.
-- [ ] Templates for verification, recovery and security alerts. *(Partial: verification and recovery use Keycloak's templates. Branded templates and security alerts move to Phase 4.)*
-- [ ] Per-tenant template overrides. *(Moved to Phase 4 with per-tenant branding.)*
-- [ ] Per-tenant sending quotas. *(Partial: per-IP limits on email-sending endpoints. Per-account and per-tenant quotas: limitation L-04, Phase 3.)*
+- [ ] Templates for verification, recovery and security alerts. *(Partial: verification and recovery use Keycloak's templates. Branded templates and security alerts are carried to M4.3.)*
+- [ ] Per-tenant template overrides. *(Carried to M4.3 with per-tenant branding.)*
+- [ ] Per-tenant sending quotas. *(Partial: per-IP limits on email-sending endpoints. Keycloak sends email itself, so per-account and per-tenant quotas need an SMTP relay or a Keycloak extension; carried to M6.4 — limitation L-04.)*
 
 **Done when:** each email type is delivered and rendered correctly for two different tenants.
 
@@ -286,7 +286,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 - [x] EF Core global query filters on tenant identifiers.
 - [x] PostgreSQL Row-Level Security policies (forced; ADR-0008).
 - [x] 404 responses for resources in other tenants.
-- [x] Tenant-isolation test harness added to CI. *(Endpoints are discovered from the route table. An endpoint without the `OrganizationScoped` marker fails the suite unless it is on the reviewed unscoped list. A deliberately unprotected endpoint has not yet been added as a negative control.)*
+- [x] Tenant-isolation test harness added to CI. *(Endpoints are discovered from the route table; an endpoint without the `OrganizationScoped` marker fails the suite unless it is on the reviewed unscoped list. Negative control: the probe must flag an endpoint that answers without tenant authorization. A guard test requires forced RLS on every tenant table in the model.)*
 
 **Done when:** the harness runs in CI and a deliberately unprotected test endpoint fails it.
 
@@ -319,7 +319,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 - [x] Application types: SPA, native, server-side web, machine-to-machine.
 - [x] Callback URLs, logout URLs and CORS origins with validation.
-- [ ] Authentication methods, token and session policies. *(Partial: the authentication method follows the application type — PKCE for public clients, `client_secret_post` for confidential ones. Token and session lifetimes come from the realm baseline; per-application overrides are not yet configurable.)*
+- [x] Authentication methods, token and session policies. *(The authentication method follows the application type: PKCE for public clients, `client_secret_post` for confidential ones. Each application can set its access token lifetime (5–60 minutes, ADR-0003) and session idle and maximum timeouts, bounded by the environment baseline. Values are verified against tokens Keycloak issues, and drift is reverted.)*
 - [x] Public configuration endpoint containing no secrets.
 - [x] Isolation tests for every endpoint.
 
@@ -331,7 +331,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 - [x] Confidential client secrets shown once (also omitted from idempotent replays).
 - [x] Developer API keys with prefixes, stored as keyed digests.
-- [ ] Rotation with overlap window. *(Partial: rotation is immediate — limitation L-13.)*
+- [x] Rotation with overlap window. *(Client secrets: 24-hour overlap via Keycloak's secret-rotation policy, `revokePrevious` or `DELETE …/secret/previous` to end it at once — limitation L-13. API keys: issue the new key, then revoke the old.)*
 - [x] Expiration and immediate revocation.
 - [x] Scopes and quotas on API keys.
 
@@ -354,8 +354,8 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 - [x] Application-specific roles. *(Keycloak administrative role names are reserved — limitation L-15.)*
 - [x] Role assignment to users.
-- [ ] OAuth scopes and resource audiences. *(Partial: resource audiences are configurable per application; custom OAuth scopes are not yet.)*
-- [ ] Roles and scopes included in issued tokens. *(Partial: roles arrive as a flat `roles` claim and are enforced by the example API; custom scopes follow the item above.)*
+- [x] OAuth scopes and resource audiences. *(Scopes are defined per environment and granted per application as optional scopes; audiences per application.)*
+- [x] Roles and scopes included in issued tokens. *(Roles in a flat `roles` claim, scopes in the standard `scope` claim; the example API enforces both.)*
 
 **Done when:** a protected API can enforce a role and a scope from a token issued for a configured application.
 
@@ -371,7 +371,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Done when:** all Phase 3 tests pass and the first Dovepeak internal application is onboarded (Gate G2).
 
-> **Status (2026-10-09):** the Phase 3 test suite passes locally (141 integration, 48 unit, BFF end-to-end, log scan); it has not yet run in GitHub Actions. Four items remain partial (per-application token/session policies, secret rotation overlap, custom OAuth scopes and the scopes in tokens that depend on them). Gate G2 also requires onboarding the first Dovepeak internal application, which has not happened yet.
+> **Status (2026-10-09):** every Phase 3 milestone item is implemented and tested locally (see the README for suite sizes); the suite has not yet run in GitHub Actions. Gate G2 still requires onboarding the first Dovepeak internal application.
 
 ---
 
@@ -404,7 +404,8 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 - [ ] Application creation by type.
 - [ ] Callback URLs, logout URLs and allowed origins.
 - [ ] Authentication methods, token and session policies.
-- [ ] Branding and hosted login page settings.
+- [ ] Branding and hosted login page settings, including per-tenant logo and colours (carried from M1.5).
+- [ ] Branded email templates, security alert emails and per-tenant template overrides (carried from M2.2).
 - [ ] Email template editor.
 
 **Done when:** every application setting in the Management API can be changed from the portal.
@@ -553,6 +554,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 - [ ] Load testing with k6.
 - [ ] API fuzzing with Schemathesis.
 - [ ] Key rotation and credential revocation tests.
+- [ ] Per-account and per-tenant email sending quotas (carried from M2.2, limitation L-04).
 - [ ] Independent penetration test.
 - [ ] All critical and high findings fixed.
 

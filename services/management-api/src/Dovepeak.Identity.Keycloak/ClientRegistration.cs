@@ -37,8 +37,13 @@ public sealed record ClientRegistration
     /// <summary>Resource server audiences added to this client's access tokens.</summary>
     public IReadOnlyList<string> Audiences { get; init; } = [];
 
+    /// <summary>Token and session lifetimes; unset values inherit the realm baseline.</summary>
+    public TokenPolicy TokenPolicy { get; init; } = TokenPolicy.Inherit;
+
     public void Validate()
     {
+        TokenPolicy.Validate(Kind);
+
         if (Kind == ClientKind.Machine && (RedirectUris.Count > 0 || PostLogoutRedirectUris.Count > 0))
         {
             throw new ArgumentException("Machine clients do not use redirect URIs.");

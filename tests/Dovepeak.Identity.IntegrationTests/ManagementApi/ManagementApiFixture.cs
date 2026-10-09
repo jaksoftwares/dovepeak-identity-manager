@@ -27,7 +27,7 @@ public sealed class ManagementApiGroup : ICollectionFixture<ManagementApiFixture
 public sealed class ManagementApiFixture : IAsyncLifetime
 {
     public static readonly Uri PortalRedirectUri = new("http://localhost:3999/callback");
-    private const string PlatformRealm = "dovepeak-platform";
+    public const string PlatformRealm = "dovepeak-platform";
 
     private readonly WebApplicationFactory<ManagementApi::Program> _factory;
     private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
@@ -77,10 +77,9 @@ public sealed class ManagementApiFixture : IAsyncLifetime
             await db.Projects.Where(p => organizations.Contains(p.OrganizationId)).ExecuteDeleteAsync();
             await db.Organizations.Where(o => organizations.Contains(o.Id)).ExecuteDeleteAsync();
 
-            foreach (var realm in realms)
-            {
-                await KeycloakAdmin.Client.DeleteRealmAsync(RealmName.Parse(realm), CancellationToken.None);
-            }
+            // A full run leaves a few hundred realms; deleting them one at a time takes minutes (~2 s each).
+            await Parallel.ForEachAsync(realms, new ParallelOptions { MaxDegreeOfParallelism = 8 },
+                async (realm, ct) => await KeycloakAdmin.Client.DeleteRealmAsync(RealmName.Parse(realm), ct));
         }
 
         _factory.Dispose();

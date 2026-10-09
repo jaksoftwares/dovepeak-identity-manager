@@ -32,6 +32,8 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 
     public DbSet<ApplicationRole> ApplicationRoles => Set<ApplicationRole>();
 
+    public DbSet<EnvironmentScope> EnvironmentScopes => Set<EnvironmentScope>();
+
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     public DbSet<ManagementAuditEvent> ManagementAuditEvents => Set<ManagementAuditEvent>();
@@ -165,9 +167,22 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
             entity.Property(a => a.Kind).HasConversion<string>().HasMaxLength(16);
             entity.Property(a => a.ClientId).HasMaxLength(64);
             entity.Property(a => a.EngineClientId).HasMaxLength(64);
+            entity.Property(a => a.Scopes).HasDefaultValueSql("'{}'::text[]");
             entity.HasIndex(a => a.ClientId).IsUnique();
             entity.HasIndex(a => new { a.EnvironmentId, a.Name }).IsUnique();
             entity.HasOne<ProjectEnvironment>().WithMany().HasForeignKey(a => a.EnvironmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EnvironmentScope>(entity =>
+        {
+            entity.ToTable("environment_scopes");
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Name).HasMaxLength(64);
+            entity.Property(s => s.Description).HasMaxLength(500);
+            entity.Property(s => s.EngineScopeId).HasMaxLength(64);
+            entity.HasIndex(s => new { s.EnvironmentId, s.Name }).IsUnique();
+            entity.HasIndex(s => s.OrganizationId);
+            entity.HasOne<ProjectEnvironment>().WithMany().HasForeignKey(s => s.EnvironmentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ApplicationRole>(entity =>

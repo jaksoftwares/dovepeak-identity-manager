@@ -33,6 +33,35 @@ public sealed class ReconciliationTests(ManagementApiFixture api)
     }
 
     [Fact]
+    public async Task ManualTokenLifetimeChange_IsReverted()
+    {
+        var scenario = await Scenario.CreateAsync(api);
+        var created = (await scenario.Owner.PostAsync($"{scenario.Development}/applications", new
+        {
+            name = "short-lived",
+            kind = "spa",
+            redirectUris = new[] { "http://localhost:3999/callback" },
+            tokenPolicy = new { accessTokenLifetimeSeconds = 300 },
+        })).Expect(HttpStatusCode.Created).Json;
+        var realm = RealmName.ForEnvironment(scenario.DevelopmentId);
+        var engineId = (await KeycloakAdmin.Client.FindClientIdAsync(realm, created["application"]!["clientId"]!.GetValue<string>(), CancellationToken.None))!;
+
+        // Day-long access tokens and an unbounded client session, set directly in Keycloak.
+        var tampered = await KeycloakAdmin.Client.GetClientAsync(realm, engineId, CancellationToken.None);
+        tampered["attributes"]!["access.token.lifespan"] = "86400";
+        tampered["attributes"]!["client.session.idle.timeout"] = "86400";
+        await PutClientAsync(realm, engineId, tampered);
+
+        var corrections = await api.ReconcileAsync(scenario.DevelopmentId);
+
+        Assert.Contains(corrections, c => c.Kind == "client_config_restored");
+        var restored = (await KeycloakAdmin.Client.GetClientAsync(realm, engineId, CancellationToken.None))["attributes"]!;
+        Assert.Equal("300", restored["access.token.lifespan"]!.GetValue<string>());
+        Assert.Equal(string.Empty, restored["client.session.idle.timeout"]?.GetValue<string>() ?? string.Empty);
+        Assert.Empty(await api.ReconcileAsync(scenario.DevelopmentId));
+    }
+
+    [Fact]
     public async Task DeletedClient_IsRecreated_AndUnknownClientIsRemoved()
     {
         var scenario = await Scenario.CreateAsync(api);
@@ -72,6 +101,28 @@ public sealed class ReconciliationTests(ManagementApiFixture api)
         var representation = (await KeycloakAdmin.Client.GetRealmAsync(realm, CancellationToken.None))!;
         Assert.True(representation["bruteForceProtected"]!.GetValue<bool>());
         Assert.Equal(600, representation["accessTokenLifespan"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task RemovedOrWeakenedClientPolicies_AreRestored()
+    {
+        var scenario = await Scenario.CreateAsync(api);
+        var realm = RealmName.ForEnvironment(scenario.DevelopmentId);
+
+        // Disabling the client policies would silently drop PKCE enforcement and overlapping secret rotation.
+        await KeycloakAdmin.Client.UpdateClientPoliciesAsync(realm, new JsonObject { ["policies"] = new JsonArray() }, CancellationToken.None);
+        var profiles = await KeycloakAdmin.Client.GetClientProfilesAsync(realm, CancellationToken.None);
+        profiles["profiles"]![0]!["executors"] = new JsonArray();
+        await KeycloakAdmin.Client.UpdateClientProfilesAsync(realm, profiles, CancellationToken.None);
+
+        var corrections = await api.ReconcileAsync(scenario.DevelopmentId);
+
+        Assert.Contains(corrections, c => c.Kind == "client_policies_restored");
+        var policies = (await KeycloakAdmin.Client.GetClientPoliciesAsync(realm, CancellationToken.None))["policies"]!.AsArray();
+        Assert.Equal(["dovepeak-secure-defaults", "dovepeak-secret-rotation"], policies.Select(p => p!["name"]!.GetValue<string>()));
+        var restored = (await KeycloakAdmin.Client.GetClientProfilesAsync(realm, CancellationToken.None))["profiles"]!.AsArray();
+        Assert.Contains("pkce-enforcer", restored[0]!["executors"]!.AsArray().Select(e => e!["executor"]!.GetValue<string>()));
+        Assert.Empty(await api.ReconcileAsync(scenario.DevelopmentId));
     }
 
     [Fact]

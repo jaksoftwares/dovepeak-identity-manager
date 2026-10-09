@@ -10,25 +10,53 @@ namespace Dovepeak.Identity.IntegrationTests.ManagementApi;
 public sealed class CredentialApiTests(ManagementApiFixture api)
 {
     [Fact]
-    public async Task RotatingSecret_InvalidatesTheOldOneImmediately()
+    public async Task RotatingSecret_KeepsThePreviousSecretDuringTheOverlap_UntilItIsRevoked()
     {
         var scenario = await Scenario.CreateAsync(api);
         var created = await scenario.CreateApplicationAsync("machine", audiences: ["orders-api"]);
         var clientId = created["application"]!["clientId"]!.GetValue<string>();
         var oldSecret = created["clientSecret"]!.GetValue<string>();
         var appPath = $"{scenario.Development}/applications/{created["application"]!["id"]!.GetValue<string>()}";
-        var issuer = new Uri(StackSettings.Current.KeycloakUrl, $"realms/{RealmName.ForEnvironment(scenario.DevelopmentId)}");
+        var issuer = Issuer(scenario);
 
         Assert.True(await ClientCredentialsAsync(issuer, clientId, oldSecret));
 
         var rotated = (await scenario.Owner.PostAsync($"{appPath}/secret")).Expect(HttpStatusCode.OK);
         var newSecret = rotated.Json["clientSecret"]!.GetValue<string>();
+        var previousExpiresAt = rotated.Json["previousSecretExpiresAt"]!.GetValue<DateTimeOffset>();
 
         Assert.Equal("no-store", rotated.Headers["Cache-Control"]);
         Assert.NotEqual(oldSecret, newSecret);
+        Assert.InRange(previousExpiresAt, DateTimeOffset.UtcNow.AddHours(23), DateTimeOffset.UtcNow.AddHours(25));
+
+        // During the overlap both secrets work, so the application can be redeployed without downtime.
+        Assert.True(await ClientCredentialsAsync(issuer, clientId, oldSecret));
+        Assert.True(await ClientCredentialsAsync(issuer, clientId, newSecret));
+
+        (await scenario.Owner.DeleteAsync($"{appPath}/secret/previous")).Expect(HttpStatusCode.NoContent);
+
         Assert.False(await ClientCredentialsAsync(issuer, clientId, oldSecret));
         Assert.True(await ClientCredentialsAsync(issuer, clientId, newSecret));
     }
+
+    [Fact]
+    public async Task RotatingSecret_WithRevokePrevious_InvalidatesTheOldOneImmediately()
+    {
+        var scenario = await Scenario.CreateAsync(api);
+        var created = await scenario.CreateApplicationAsync("machine", audiences: ["orders-api"]);
+        var clientId = created["application"]!["clientId"]!.GetValue<string>();
+        var oldSecret = created["clientSecret"]!.GetValue<string>();
+        var appPath = $"{scenario.Development}/applications/{created["application"]!["id"]!.GetValue<string>()}";
+
+        var rotated = (await scenario.Owner.PostAsync($"{appPath}/secret?revokePrevious=true")).Expect(HttpStatusCode.OK);
+
+        Assert.Null(rotated.Json["previousSecretExpiresAt"]);
+        Assert.False(await ClientCredentialsAsync(Issuer(scenario), clientId, oldSecret));
+        Assert.True(await ClientCredentialsAsync(Issuer(scenario), clientId, rotated.Json["clientSecret"]!.GetValue<string>()));
+    }
+
+    private static Uri Issuer(Scenario scenario) =>
+        new(StackSettings.Current.KeycloakUrl, $"realms/{RealmName.ForEnvironment(scenario.DevelopmentId)}");
 
     [Fact]
     public async Task PublicClients_HaveNoSecretToRotate()

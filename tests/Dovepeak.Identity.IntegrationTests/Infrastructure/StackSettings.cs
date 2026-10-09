@@ -29,6 +29,9 @@ public sealed class StackSettings
 
     public required string PostgresConnection { get; init; }
 
+    /// <summary>The containerized Management API, as deployed by compose (not the in-process test host).</summary>
+    public required Uri ManagementApiUrl { get; init; }
+
     private static StackSettings Load()
     {
         var configuration = new ConfigurationBuilder()
@@ -46,6 +49,7 @@ public sealed class StackSettings
             SmtpPort = int.Parse(configuration["SMTP_PORT"] ?? "1025", System.Globalization.CultureInfo.InvariantCulture),
             PostgresConnection = configuration["POSTGRES_CONNECTION"]
                 ?? "Host=localhost;Port=5442;Database=dovepeak;Username=dovepeak;Password=dovepeak_local_only",
+            ManagementApiUrl = new Uri(configuration["MANAGEMENT_API_URL"] ?? "http://localhost:5080/"),
         };
     }
 }

@@ -42,6 +42,12 @@ internal static class ClientRepresentation
             },
         };
 
+        var attributes = (JsonObject)client["attributes"]!;
+        foreach (var (key, value) in registration.TokenPolicy.ToAttributes())
+        {
+            attributes[key] = value;
+        }
+
         // Every client gets a flat "roles" claim with the user's roles for this application, plus one audience
         // mapper per resource server it may call.
         client["protocolMappers"] = ToArray(registration.Audiences.Select(AudienceMapper).Prepend(RolesMapper(registration.ClientId)));

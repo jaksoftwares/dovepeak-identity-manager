@@ -155,9 +155,40 @@ public sealed class Application : ITenantOwned
 
     public List<string> Audiences { get; set; } = [];
 
+    /// <summary>Environment scopes this application may request; issued tokens carry them in the "scope" claim.</summary>
+    public List<string> Scopes { get; set; } = [];
+
+    /// <summary>Token and session lifetimes in seconds; null inherits the realm baseline.</summary>
+    public int? AccessTokenLifetimeSeconds { get; set; }
+
+    public int? SessionIdleTimeoutSeconds { get; set; }
+
+    public int? SessionMaxLifetimeSeconds { get; set; }
+
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>An OAuth scope defined for one project environment (for example "orders:read").</summary>
+public sealed class EnvironmentScope : ITenantOwned
+{
+    public Guid Id { get; init; } = Guid.CreateVersion7();
+
+    public Guid OrganizationId { get; init; }
+
+    public Guid ProjectId { get; init; }
+
+    public Guid EnvironmentId { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Description { get; set; }
+
+    /// <summary>Identity engine's internal ID for the client scope.</summary>
+    public string? EngineScopeId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; init; }
 }
 
 public sealed class ApplicationRole : ITenantOwned

@@ -77,7 +77,7 @@
   },
 
   "attributes": {
-    "dovepeak.templateVersion": "1",
+    "dovepeak.templateVersion": "2",
     "frontendUrl": ""
   },
 
@@ -90,6 +90,20 @@
           { "executor": "pkce-enforcer", "configuration": { "auto-configure": "true" } },
           { "executor": "reject-implicit-grant", "configuration": { "auto-configure": "true" } },
           { "executor": "reject-ropc-grant", "configuration": { "auto-configure": "true" } }
+        ]
+      },
+      {
+        "name": "dovepeak-secret-rotation",
+        "description": "Rotated client secrets stay valid for 24 hours so deployments can switch without downtime (ADR-0004). Secrets themselves do not expire in practice (10 years).",
+        "executors": [
+          {
+            "executor": "secret-rotation",
+            "configuration": {
+              "expiration-period": "315360000",
+              "rotated-expiration-period": "86400",
+              "remaining-rotation-period": "86400"
+            }
+          }
         ]
       }
     ]
@@ -104,6 +118,15 @@
           { "condition": "any-client", "configuration": {} }
         ],
         "profiles": ["dovepeak-secure-defaults"]
+      },
+      {
+        "name": "dovepeak-secret-rotation",
+        "description": "Applies overlapping secret rotation to confidential clients.",
+        "enabled": true,
+        "conditions": [
+          { "condition": "client-access-type", "configuration": { "type": ["confidential"] } }
+        ],
+        "profiles": ["dovepeak-secret-rotation"]
       }
     ]
   }

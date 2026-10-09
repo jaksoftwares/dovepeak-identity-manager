@@ -17,7 +17,11 @@ internal static class ProjectEndpoints
         IReadOnlyList<string>? RedirectUris,
         IReadOnlyList<string>? PostLogoutRedirectUris,
         IReadOnlyList<string>? WebOrigins,
-        IReadOnlyList<string>? Audiences);
+        IReadOnlyList<string>? Audiences,
+        ApplicationTokenPolicy? TokenPolicy,
+        IReadOnlyList<string>? Scopes);
+
+    public sealed record CreateScopeRequest(string Name, string? Description);
 
     public sealed record CreateRoleRequest(string Name, string? Description);
 
@@ -46,6 +50,21 @@ internal static class ProjectEndpoints
         env.MapGet("", (Guid orgId, Guid projectId, Guid environmentId, ProjectService s, CancellationToken ct) =>
             s.GetEnvironmentAsync(orgId, projectId, environmentId, ct)).WithTags("Environments");
 
+        // OAuth scopes
+        env.MapGet("/scopes", (Guid orgId, Guid projectId, Guid environmentId, ScopeService s, CancellationToken ct) =>
+            s.ListAsync(orgId, projectId, environmentId, ct)).WithTags("Scopes");
+        env.MapPost("/scopes", async (Guid orgId, Guid projectId, Guid environmentId, CreateScopeRequest request, ScopeService s, CancellationToken ct) =>
+            {
+                var scope = await s.CreateAsync(orgId, projectId, environmentId, request.Name, request.Description, ct);
+                return Results.Created($"/v1/organizations/{orgId}/projects/{projectId}/environments/{environmentId}/scopes/{scope.Name}", scope);
+            })
+            .AddEndpointFilter<IdempotencyFilter>().WithTags("Scopes");
+        env.MapDelete("/scopes/{scopeName}", async (Guid orgId, Guid projectId, Guid environmentId, string scopeName, ScopeService s, CancellationToken ct) =>
+        {
+            await s.DeleteAsync(orgId, projectId, environmentId, scopeName, ct);
+            return Results.NoContent();
+        }).WithTags("Scopes");
+
         // Applications
         env.MapGet("/applications", (Guid orgId, Guid projectId, Guid environmentId, ApplicationService s, CancellationToken ct) =>
             s.ListAsync(orgId, projectId, environmentId, ct)).WithTags("Applications");
@@ -53,7 +72,7 @@ internal static class ProjectEndpoints
                 HttpContext http, CancellationToken ct) =>
             {
                 var created = await s.CreateAsync(orgId, projectId, environmentId, new ApplicationSettings(
-                    request.Name, request.Kind, request.RedirectUris, request.PostLogoutRedirectUris, request.WebOrigins, request.Audiences), ct);
+                    request.Name, request.Kind, request.RedirectUris, request.PostLogoutRedirectUris, request.WebOrigins, request.Audiences, request.TokenPolicy, request.Scopes), ct);
                 NoStore(http);
                 return Results.Created($"/v1/organizations/{orgId}/projects/{projectId}/environments/{environmentId}/applications/{created.Application.Id}", created);
             })
@@ -71,13 +90,18 @@ internal static class ProjectEndpoints
         });
         app.MapGet("/config", (Guid orgId, Guid projectId, Guid environmentId, Guid applicationId, ApplicationService s, CancellationToken ct) =>
             s.GetConfigAsync(orgId, projectId, environmentId, applicationId, ct));
-        app.MapPost("/secret", async (Guid orgId, Guid projectId, Guid environmentId, Guid applicationId, ApplicationService s, HttpContext http, CancellationToken ct) =>
+        app.MapPost("/secret", async (Guid orgId, Guid projectId, Guid environmentId, Guid applicationId, bool? revokePrevious, ApplicationService s, HttpContext http, CancellationToken ct) =>
             {
-                var rotated = await s.RotateSecretAsync(orgId, projectId, environmentId, applicationId, ct);
+                var rotated = await s.RotateSecretAsync(orgId, projectId, environmentId, applicationId, revokePrevious ?? false, ct);
                 NoStore(http);
                 return Results.Ok(rotated);
             })
             .AddEndpointFilter<IdempotencyFilter>().WithMetadata(new SecretBearingResponseAttribute());
+        app.MapDelete("/secret/previous", async (Guid orgId, Guid projectId, Guid environmentId, Guid applicationId, ApplicationService s, CancellationToken ct) =>
+        {
+            await s.RevokePreviousSecretAsync(orgId, projectId, environmentId, applicationId, ct);
+            return Results.NoContent();
+        });
 
         // Roles and assignments
         app.MapGet("/roles", (Guid orgId, Guid projectId, Guid environmentId, Guid applicationId, RoleService s, CancellationToken ct) =>

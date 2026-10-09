@@ -41,7 +41,10 @@ builder.Services
 // Application roles managed in Dovepeak Identity arrive as a flat "roles" claim. ("admin" itself is reserved by the
 // identity engine, so the example uses "administrator".)
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("admin", policy => policy.RequireClaim("roles", "administrator"));
+    .AddPolicy("admin", policy => policy.RequireClaim("roles", "administrator"))
+    // OAuth scopes defined in Dovepeak arrive in the standard space-separated "scope" claim.
+    .AddPolicy("orders:read", policy => policy.RequireAssertion(context =>
+        context.User.FindAll("scope").SelectMany(c => c.Value.Split(' ')).Contains("orders:read", StringComparer.Ordinal)));
 
 var app = builder.Build();
 
@@ -59,5 +62,8 @@ app.MapGet("/me", (HttpContext context) => Results.Ok(new
 
 app.MapGet("/admin", () => Results.Ok(new { message = "Only users with the administrator role can read this." }))
     .RequireAuthorization("admin");
+
+app.MapGet("/orders", () => Results.Ok(new { message = "Only tokens granted the orders:read scope can read this." }))
+    .RequireAuthorization("orders:read");
 
 app.Run();

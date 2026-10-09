@@ -33,6 +33,9 @@ dpk_<environment>_<random>
 
 * Secrets are displayed exactly once. No endpoint returns them afterwards.
 * Every credential supports expiration, rotation with an overlap window, and immediate revocation.
+  *Implementation (Phase 3):* client secrets rotate with a 24-hour overlap through Keycloak's `secret-rotation` client policy
+  (preview feature `client-secret-rotation`, limitation L-13); the previous secret can be revoked immediately.
+  API keys are revoked immediately and replaced by issuing a new key while the old one is still valid.
 * API keys carry scopes and quotas limiting what they can do.
 * Credentials, tokens and secrets are never written to logs or error messages.
 * Public client configuration endpoints are tested to confirm they contain no secrets.

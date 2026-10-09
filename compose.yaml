@@ -199,6 +199,8 @@ services:
       Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
       Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
       Platform__PortalRedirectUris__0: http://localhost:3100/api/auth/callback
+      # Integration tests sign developers in through the portal client with this callback (local and CI stack only).
+      Platform__PortalRedirectUris__1: http://localhost:3999/callback
       Keycloak__Smtp__Port: "1025"
       Keycloak__Smtp__StartTls: "false"
     ports:
@@ -214,6 +216,32 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Developer portal (backend-for-frontend over the Management API). Tokens stay in this server and Valkey.
+  portal:
+    build:
+      context: ./portal
+    restart: unless-stopped
+    environment:
+      PLATFORM_ISSUER: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/realms/dovepeak-platform
+      PORTAL_CLIENT_ID: dovepeak-portal
+      # The public issuer origin is not reachable from inside the container; server-side calls go here instead.
+      IDENTITY_INTERNAL_URL: http://keycloak:8080
+      APP_URL: http://localhost:${PORTAL_HOST_PORT:-3100}
+      MANAGEMENT_API_URL: http://management-api:8080
+      SESSION_REDIS_URL: redis://:${VALKEY_PASSWORD}@valkey:6379/2
+    ports:
+      - "127.0.0.1:${PORTAL_HOST_PORT:-3100}:3100"
+    depends_on:
+      management-api:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ > /dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

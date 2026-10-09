@@ -41,7 +41,7 @@ services:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD}
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.0
+    image: quay.io/keycloak/keycloak:26.8.0
     restart: unless-stopped
     command: ["start-dev"]
     environment:
@@ -81,7 +81,7 @@ services:
 
   keycloak-bootstrap:
     # One-shot job: creates the Management API's least-privilege service account.
-    image: quay.io/keycloak/keycloak:26.4.0
+    image: quay.io/keycloak/keycloak:26.8.0
     entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
     restart: "no"
     environment:

@@ -35,14 +35,14 @@ public static class HealthCheckRegistration
         {
             Predicate = _ => false,
             ResponseWriter = WriteResponse,
-        });
+        }).AllowAnonymous();
 
         // Readiness: the API can serve traffic because its dependencies are reachable.
         endpoints.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = check => check.Tags.Contains(ReadyTag),
             ResponseWriter = WriteResponse,
-        });
+        }).AllowAnonymous();
 
         return endpoints;
     }

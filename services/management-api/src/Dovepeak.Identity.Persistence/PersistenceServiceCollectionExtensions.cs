@@ -1,3 +1,4 @@
+using Dovepeak.Identity.Persistence.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +12,13 @@ public static class PersistenceServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("Postgres")
             ?? throw new InvalidOperationException("Connection string 'Postgres' is not configured.");
 
-        services.AddDbContext<PlatformDbContext>(options => Configure(options, connectionString));
+        services.AddScoped<TenantScope>();
+        services.AddDbContext<PlatformDbContext>((provider, options) =>
+        {
+            Configure(options, connectionString);
+            options.AddInterceptors(new TenantSessionInterceptor(provider.GetRequiredService<TenantScope>()));
+        });
+
         return services;
     }
 

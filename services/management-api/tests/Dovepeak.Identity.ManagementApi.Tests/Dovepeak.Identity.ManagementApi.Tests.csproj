@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dovepeak.Identity.ManagementApi\Dovepeak.Identity.ManagementApi.csproj" />
     <ProjectReference Include="..\..\src\Dovepeak.Identity.Keycloak\Dovepeak.Identity.Keycloak.csproj" />
+    <ProjectReference Include="..\..\src\Dovepeak.Identity.Platform\Dovepeak.Identity.Platform.csproj" />
   </ItemGroup>
 
 </Project>

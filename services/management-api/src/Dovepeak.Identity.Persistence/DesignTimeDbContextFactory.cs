@@ -1,3 +1,4 @@
+using Dovepeak.Identity.Persistence.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
@@ -16,6 +17,8 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<Pla
 
         var options = new DbContextOptionsBuilder<PlatformDbContext>();
         PersistenceServiceCollectionExtensions.Configure(options, connectionString);
-        return new PlatformDbContext(options.Options);
+        var scope = new TenantScope();
+        scope.EnterSystem();
+        return new PlatformDbContext(options.Options, scope);
     }
 }

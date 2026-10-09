@@ -9,8 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\management-api\src\Dovepeak.Identity.Persistence\Dovepeak.Identity.Persistence.csproj" />
-    <ProjectReference Include="..\..\management-api\src\Dovepeak.Identity.Keycloak\Dovepeak.Identity.Keycloak.csproj" />
+    <ProjectReference Include="..\..\management-api\src\Dovepeak.Identity.Platform\Dovepeak.Identity.Platform.csproj" />
   </ItemGroup>
 
   <ItemGroup>

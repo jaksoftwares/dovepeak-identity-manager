@@ -42,15 +42,32 @@ internal static class ClientRepresentation
             },
         };
 
-        if (registration.Audiences.Count > 0)
-        {
-            client["protocolMappers"] = ToArray(registration.Audiences.Select(AudienceMapper));
-        }
+        // Every client gets a flat "roles" claim with the user's roles for this application, plus one audience
+        // mapper per resource server it may call.
+        client["protocolMappers"] = ToArray(registration.Audiences.Select(AudienceMapper).Prepend(RolesMapper(registration.ClientId)));
 
         return client;
     }
 
-    private static JsonObject AudienceMapper(string audience) => new()
+    internal static JsonObject RolesMapper(string clientId) => new()
+    {
+        ["name"] = "dovepeak-roles",
+        ["protocol"] = "openid-connect",
+        ["protocolMapper"] = "oidc-usermodel-client-role-mapper",
+        ["config"] = new JsonObject
+        {
+            ["usermodel.clientRoleMapping.clientId"] = clientId,
+            ["claim.name"] = "roles",
+            ["jsonType.label"] = "String",
+            ["multivalued"] = "true",
+            ["access.token.claim"] = "true",
+            ["id.token.claim"] = "false",
+            ["userinfo.token.claim"] = "false",
+            ["introspection.token.claim"] = "true",
+        },
+    };
+
+    internal static JsonObject AudienceMapper(string audience) => new()
     {
         ["name"] = $"audience-{audience}",
         ["protocol"] = "openid-connect",

@@ -38,7 +38,10 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+// Application roles managed in Dovepeak Identity arrive as a flat "roles" claim. ("admin" itself is reserved by the
+// identity engine, so the example uses "administrator".)
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("admin", policy => policy.RequireClaim("roles", "administrator"));
 
 var app = builder.Build();
 
@@ -53,5 +56,8 @@ app.MapGet("/me", (HttpContext context) => Results.Ok(new
     email = context.User.FindFirst("email")?.Value,
     clientId = context.User.FindFirst("azp")?.Value,
 })).RequireAuthorization();
+
+app.MapGet("/admin", () => Results.Ok(new { message = "Only users with the administrator role can read this." }))
+    .RequireAuthorization("admin");
 
 app.Run();

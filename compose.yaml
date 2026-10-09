@@ -55,6 +55,8 @@ services:
       KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8080}
       KC_HOSTNAME_ADMIN: http://localhost:${KEYCLOAK_ADMIN_HOST_PORT:-8081}
       KC_PROXY_HEADERS: xforwarded
+      # Internal callers (Management API, workers) receive internal URLs for keys and endpoints in discovery.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?Copy .env.example to .env}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Copy .env.example to .env}
     ports:
@@ -162,6 +164,8 @@ services:
       Keycloak__BaseUrl: http://keycloak:8080
       Keycloak__ClientId: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
       Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
+      Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
+      Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
     depends_on:
       db-migrate:
         condition: service_completed_successfully
@@ -189,6 +193,9 @@ services:
       Keycloak__ClientId: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
       Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
       Keycloak__Smtp__Host: mailpit
+      Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
+      Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
+      Platform__PortalRedirectUris__0: http://localhost:3100/api/auth/callback
       Keycloak__Smtp__Port: "1025"
       Keycloak__Smtp__StartTls: "false"
     ports:

@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\services\management-api\src\Dovepeak.Identity.Keycloak\Dovepeak.Identity.Keycloak.csproj" />
     <ProjectReference Include="..\..\examples\dotnet-protected-api\Dovepeak.Examples.ProtectedApi\Dovepeak.Examples.ProtectedApi.csproj" Aliases="ProtectedApi" />
+    <ProjectReference Include="..\..\services\management-api\src\Dovepeak.Identity.ManagementApi\Dovepeak.Identity.ManagementApi.csproj" Aliases="ManagementApi" />
     <ProjectReference Include="..\..\services\workers\Dovepeak.Identity.Workers\Dovepeak.Identity.Workers.csproj" />
   </ItemGroup>
 

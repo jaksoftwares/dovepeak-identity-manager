@@ -269,12 +269,12 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M2.6
 
-- [ ] ASP.NET Core modular monolith structure.
-- [ ] `/v1` versioned routing.
-- [ ] Standard error format (RFC 9457 Problem Details).
-- [ ] OpenAPI generation.
+- [x] ASP.NET Core modular monolith structure. *(`Dovepeak.Identity.Platform` holds the domain services shared by the API and workers; the API is a thin HTTP layer.)*
+- [x] `/v1` versioned routing.
+- [x] Standard error format (RFC 9457 Problem Details) with a stable `code` field.
+- [x] OpenAPI generation. *(`/openapi/v1.json`; exported, validated and archived by CI.)*
 - [x] EF Core with migrations. *(Delivered early in M2.5: `Dovepeak.Identity.Persistence` and the `db-migrate` job.)*
-- [ ] Developer authentication through the Keycloak "platform" realm.
+- [x] Developer authentication through the Keycloak "platform" realm. *(Realm and portal client created idempotently at start-up; API keys as a second scheme.)*
 
 **Done when:** an authenticated developer can call a `/v1` endpoint and the OpenAPI document is generated in CI.
 
@@ -282,11 +282,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.1
 
-- [ ] Central authorization policy checking organization, project, application and environment access.
-- [ ] EF Core global query filters on tenant identifiers.
-- [ ] PostgreSQL Row-Level Security policies.
-- [ ] 404 responses for resources in other tenants.
-- [ ] Tenant-isolation test harness added to CI.
+- [x] Central authorization policy checking organization, project, application and environment access.
+- [x] EF Core global query filters on tenant identifiers.
+- [x] PostgreSQL Row-Level Security policies (forced; ADR-0008).
+- [x] 404 responses for resources in other tenants.
+- [x] Tenant-isolation test harness added to CI. *(Endpoints are discovered from the route table. An endpoint without the `OrganizationScoped` marker fails the suite unless it is on the reviewed unscoped list. A deliberately unprotected endpoint has not yet been added as a negative control.)*
 
 **Done when:** the harness runs in CI and a deliberately unprotected test endpoint fails it.
 
@@ -294,10 +294,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.2
 
-- [ ] Organization CRUD.
-- [ ] Member invitations.
-- [ ] Roles: owner, admin, developer, viewer.
-- [ ] Isolation tests for every endpoint.
+- [x] Organization CRUD.
+- [x] Member invitations.
+- [x] Roles: owner, admin, developer, viewer.
+- [x] Isolation tests for every endpoint.
 
 **Done when:** members can only perform actions allowed by their role, and isolation tests pass.
 
@@ -305,11 +305,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.3
 
-- [ ] Project CRUD.
-- [ ] Development, staging and production environments per project.
-- [ ] Each environment provisions its own realm from the M2.1 template.
-- [ ] `tenant → keycloak_cluster` mapping stored.
-- [ ] Isolation tests for every endpoint.
+- [x] Project CRUD.
+- [x] Development, staging and production environments per project.
+- [x] Each environment provisions its own realm from the M2.1 template (through the transactional outbox).
+- [x] `tenant → keycloak_cluster` mapping stored. *(Only the `default` cluster is routed today — limitation L-12.)*
+- [x] Isolation tests for every endpoint.
 
 **Done when:** creating a project provisions three isolated realms, and deleting it cleans them up.
 
@@ -317,11 +317,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.4
 
-- [ ] Application types: SPA, native, server-side web, machine-to-machine.
-- [ ] Callback URLs, logout URLs and CORS origins with validation.
-- [ ] Authentication methods, token and session policies.
-- [ ] Public configuration endpoint containing no secrets.
-- [ ] Isolation tests for every endpoint.
+- [x] Application types: SPA, native, server-side web, machine-to-machine.
+- [x] Callback URLs, logout URLs and CORS origins with validation.
+- [ ] Authentication methods, token and session policies. *(Partial: the authentication method follows the application type — PKCE for public clients, `client_secret_post` for confidential ones. Token and session lifetimes come from the realm baseline; per-application overrides are not yet configurable.)*
+- [x] Public configuration endpoint containing no secrets.
+- [x] Isolation tests for every endpoint.
 
 **Done when:** application settings are reflected in Keycloak, and the public configuration endpoint is verified to contain no secrets.
 
@@ -329,11 +329,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.5
 
-- [ ] Confidential client secrets shown once.
-- [ ] Developer API keys with prefixes, stored as keyed digests.
-- [ ] Rotation with overlap window.
-- [ ] Expiration and immediate revocation.
-- [ ] Scopes and quotas on API keys.
+- [x] Confidential client secrets shown once (also omitted from idempotent replays).
+- [x] Developer API keys with prefixes, stored as keyed digests.
+- [ ] Rotation with overlap window. *(Partial: rotation is immediate — limitation L-13.)*
+- [x] Expiration and immediate revocation.
+- [x] Scopes and quotas on API keys.
 
 **Done when:** no endpoint can return a secret after creation, and revoked credentials are rejected immediately.
 
@@ -341,10 +341,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.5
 
-- [ ] Outbox pattern for Keycloak changes.
-- [ ] Idempotent provisioning operations.
-- [ ] Reconciliation worker detecting and fixing drift.
-- [ ] Drift alerts.
+- [x] Outbox pattern for Keycloak changes.
+- [x] Idempotent provisioning operations.
+- [x] Reconciliation worker detecting and fixing drift (realm baseline, client configuration, missing and unknown clients).
+- [x] Drift alerts (warning log, `drift.corrected` audit event and webhook).
 
 **Done when:** a manual change made directly in Keycloak is detected and reverted automatically.
 
@@ -352,10 +352,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.5
 
-- [ ] Application-specific roles.
-- [ ] Role assignment to users.
-- [ ] OAuth scopes and resource audiences.
-- [ ] Roles and scopes included in issued tokens.
+- [x] Application-specific roles. *(Keycloak administrative role names are reserved — limitation L-15.)*
+- [x] Role assignment to users.
+- [ ] OAuth scopes and resource audiences. *(Partial: resource audiences are configurable per application; custom OAuth scopes are not yet.)*
+- [ ] Roles and scopes included in issued tokens. *(Partial: roles arrive as a flat `roles` claim and are enforced by the example API; custom scopes follow the item above.)*
 
 **Done when:** a protected API can enforce a role and a scope from a token issued for a configured application.
 
@@ -363,13 +363,15 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.6, M3.7, M3.8
 
-- [ ] Append-only administrative audit log.
-- [ ] Webhooks with HMAC signatures, retries and exponential backoff.
-- [ ] Idempotency keys on create operations.
-- [ ] Per-tenant quotas.
-- [ ] Isolation suite covers 100% of Management API endpoints.
+- [x] Append-only administrative audit log.
+- [x] Webhooks with HMAC signatures, retries and exponential backoff (SSRF-guarded).
+- [x] Idempotency keys on create operations.
+- [x] Per-tenant quotas (organizations per developer; projects, applications, API keys and webhooks per organization).
+- [x] Isolation suite covers 100% of Management API endpoints.
 
 **Done when:** all Phase 3 tests pass and the first Dovepeak internal application is onboarded (Gate G2).
+
+> **Status (2026-10-09):** the Phase 3 test suite passes locally (141 integration, 48 unit, BFF end-to-end, log scan); it has not yet run in GitHub Actions. Four items remain partial (per-application token/session policies, secret rotation overlap, custom OAuth scopes and the scopes in tokens that depend on them). Gate G2 also requires onboarding the first Dovepeak internal application, which has not happened yet.
 
 ---
 

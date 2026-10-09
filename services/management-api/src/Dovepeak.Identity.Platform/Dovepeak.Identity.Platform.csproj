@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dovepeak.Identity.Keycloak\Dovepeak.Identity.Keycloak.csproj" />
+    <ProjectReference Include="..\Dovepeak.Identity.Persistence\Dovepeak.Identity.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dovepeak.Identity.ManagementApi.Tests" />
+    <InternalsVisibleTo Include="Dovepeak.Identity.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

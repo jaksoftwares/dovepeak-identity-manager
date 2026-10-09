@@ -6,6 +6,8 @@ WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props .editorconfig ./
 COPY services/management-api/src/Dovepeak.Identity.ManagementApi/Dovepeak.Identity.ManagementApi.csproj services/management-api/src/Dovepeak.Identity.ManagementApi/
 COPY services/management-api/src/Dovepeak.Identity.Keycloak/Dovepeak.Identity.Keycloak.csproj services/management-api/src/Dovepeak.Identity.Keycloak/
+COPY services/management-api/src/Dovepeak.Identity.Persistence/Dovepeak.Identity.Persistence.csproj services/management-api/src/Dovepeak.Identity.Persistence/
+COPY services/management-api/src/Dovepeak.Identity.Platform/Dovepeak.Identity.Platform.csproj services/management-api/src/Dovepeak.Identity.Platform/
 RUN dotnet restore services/management-api/src/Dovepeak.Identity.ManagementApi/Dovepeak.Identity.ManagementApi.csproj
 
 COPY services/management-api/src/ services/management-api/src/

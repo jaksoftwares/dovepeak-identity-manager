@@ -78,6 +78,19 @@ jobs:
           dotnet test tests/Dovepeak.Identity.IntegrationTests --configuration Release --no-build
           --logger trx --results-directory TestResults
 
+      - name: Export the OpenAPI document
+        run: |
+          curl -sf http://localhost:5080/openapi/v1.json -o openapi-v1.json
+          python3 - <<'EOF'
+          import json
+          doc = json.load(open("openapi-v1.json"))
+          paths = doc["paths"]
+          assert doc["openapi"].startswith("3."), doc["openapi"]
+          assert all(p.startswith("/v1/") for p in paths if p != "/health"), "unversioned path in the API"
+          assert "bearer" in json.dumps(doc.get("components", {})).lower(), "security scheme missing"
+          print(f"OpenAPI {doc['openapi']}: {len(paths)} paths")
+          EOF
+
       - name: BFF end-to-end test
         run: |
           dotnet run --project tools/Dovepeak.Identity.DevTool --configuration Release --no-build -- demo-setup
@@ -112,6 +125,7 @@ jobs:
           name: integration-results
           path: |
             TestResults
+            openapi-v1.json
             stack.log
             protected-api.log
             bff.log

@@ -9,6 +9,7 @@
     <Project Path="services/management-api/src/Dovepeak.Identity.Keycloak/Dovepeak.Identity.Keycloak.csproj" />
     <Project Path="services/management-api/src/Dovepeak.Identity.ManagementApi/Dovepeak.Identity.ManagementApi.csproj" />
     <Project Path="services/management-api/src/Dovepeak.Identity.Persistence/Dovepeak.Identity.Persistence.csproj" />
+    <Project Path="services/management-api/src/Dovepeak.Identity.Platform/Dovepeak.Identity.Platform.csproj" />
   </Folder>
   <Folder Name="/services/management-api/tests/">
     <Project Path="services/management-api/tests/Dovepeak.Identity.ManagementApi.Tests/Dovepeak.Identity.ManagementApi.Tests.csproj" />

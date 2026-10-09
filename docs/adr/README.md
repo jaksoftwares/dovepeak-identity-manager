@@ -20,3 +20,4 @@ This directory records significant architectural decisions for Dovepeak Identity
 | [0005](0005-cache-engine-valkey.md)                    | Cache and transient state engine          | Proposed                                 |
 | [0006](0006-hosted-login-theming.md)                   | Hosted login theming approach             | Proposed                                 |
 | [0007](0007-edge-proxy-and-admin-separation.md)        | Edge proxy, rate limiting, admin separation | Proposed                               |
+| [0008](0008-tenant-isolation-in-the-management-plane.md) | Tenant isolation in the management plane | Proposed                                 |

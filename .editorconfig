@@ -57,6 +57,8 @@ indent_size = 2
 # Test projects: Method_Scenario_Expectation naming is the convention
 [{tests/**.cs,**/tests/**.cs}]
 dotnet_diagnostic.CA1707.severity = none
+# Inline array literals in test request bodies keep tests readable
+dotnet_diagnostic.CA1861.severity = none
 
 # EF Core migrations are generated code
 [**/Migrations/*.cs]

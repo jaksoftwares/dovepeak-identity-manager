@@ -6,4 +6,6 @@ useDefault = true
 description = "Local development placeholder credentials (all end in _local_only and are never valid outside the local stack)"
 regexes = [
   '''[a-z]+_local_only''',
+  # base64 of "dovepeak-local-only-digest-key-1": local development API key digest key
+  '''ZG92ZXBlYWstbG9jYWwtb25seS1kaWdlc3Qta2V5LTE=''',
 ]

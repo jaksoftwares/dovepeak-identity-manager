@@ -148,6 +148,157 @@ public sealed class KeycloakAdminClient(
         return await ReadObjectAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Applies the desired configuration to an existing client, keeping its ID and secret.</summary>
+    public async Task UpdateClientAsync(RealmName realm, string id, ClientRegistration registration, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        registration.Validate();
+
+        var current = await GetClientAsync(realm, id, cancellationToken).ConfigureAwait(false);
+        var desired = ClientRepresentation.Build(registration);
+        foreach (var (key, value) in desired)
+        {
+            // Protocol mappers are managed through their own endpoint; attributes are merged below.
+            if (key is "protocolMappers" or "attributes")
+            {
+                continue;
+            }
+
+            current[key] = value?.DeepClone();
+        }
+
+        var attributes = current["attributes"] as JsonObject ?? [];
+        foreach (var (key, value) in (JsonObject)desired["attributes"]!)
+        {
+            attributes[key] = value?.DeepClone();
+        }
+
+        current["attributes"] = attributes;
+
+        using var response = await SendAsync(HttpMethod.Put, $"admin/realms/{realm}/clients/{id}", current, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, $"update client '{registration.ClientId}'").ConfigureAwait(false);
+        await SyncAudienceMappersAsync(realm, id, current, registration, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> DeleteClientAsync(RealmName realm, string id, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Delete, $"admin/realms/{realm}/clients/{id}", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        await EnsureSuccessAsync(response, "delete client").ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<JsonObject>> ListClientsAsync(RealmName realm, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/clients?max=1000", null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "list clients").ConfigureAwait(false);
+        var clients = await ReadArrayAsync(response, cancellationToken).ConfigureAwait(false);
+        return clients.Select(c => (JsonObject)c!).ToList();
+    }
+
+    private async Task SyncAudienceMappersAsync(
+        RealmName realm, string id, JsonObject current, ClientRegistration registration, CancellationToken cancellationToken)
+    {
+        var existing = (current["protocolMappers"] as JsonArray ?? [])
+            .Select(m => (JsonObject)m!)
+            .Where(m => m["protocolMapper"]?.GetValue<string>() == "oidc-audience-mapper")
+            .ToList();
+
+        var wanted = registration.Audiences.ToHashSet(StringComparer.Ordinal);
+        foreach (var mapper in existing)
+        {
+            var audience = mapper["config"]?["included.custom.audience"]?.GetValue<string>();
+            if (audience is null || !wanted.Remove(audience))
+            {
+                using var delete = await SendAsync(HttpMethod.Delete,
+                    $"admin/realms/{realm}/clients/{id}/protocol-mappers/models/{mapper["id"]!.GetValue<string>()}", null, cancellationToken).ConfigureAwait(false);
+                await EnsureSuccessAsync(delete, "remove audience mapper").ConfigureAwait(false);
+            }
+        }
+
+        foreach (var audience in wanted)
+        {
+            using var add = await SendAsync(HttpMethod.Post,
+                $"admin/realms/{realm}/clients/{id}/protocol-mappers/models", ClientRepresentation.AudienceMapper(audience), cancellationToken).ConfigureAwait(false);
+            await EnsureSuccessAsync(add, "add audience mapper").ConfigureAwait(false);
+        }
+    }
+
+    // ---------------------------------------------------------------- Client roles
+
+    public async Task CreateClientRoleAsync(RealmName realm, string clientId, string name, string? description, CancellationToken cancellationToken)
+    {
+        var role = new JsonObject { ["name"] = name, ["description"] = description };
+        using var response = await SendAsync(HttpMethod.Post, $"admin/realms/{realm}/clients/{clientId}/roles", role, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return;
+        }
+
+        await EnsureSuccessAsync(response, $"create role '{name}'").ConfigureAwait(false);
+    }
+
+    public async Task DeleteClientRoleAsync(RealmName realm, string clientId, string name, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Delete,
+            $"admin/realms/{realm}/clients/{clientId}/roles/{Uri.EscapeDataString(name)}", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            await EnsureSuccessAsync(response, $"delete role '{name}'").ConfigureAwait(false);
+        }
+    }
+
+    public async Task SetClientRoleAssignmentAsync(
+        RealmName realm, string userId, string clientId, string roleName, bool assigned, CancellationToken cancellationToken)
+    {
+        using var get = await SendAsync(HttpMethod.Get,
+            $"admin/realms/{realm}/clients/{clientId}/roles/{Uri.EscapeDataString(roleName)}", null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(get, $"read role '{roleName}'").ConfigureAwait(false);
+        var role = await ReadObjectAsync(get, cancellationToken).ConfigureAwait(false);
+
+        using var change = await SendAsync(assigned ? HttpMethod.Post : HttpMethod.Delete,
+            $"admin/realms/{realm}/users/{userId}/role-mappings/clients/{clientId}", new JsonArray(role), cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(change, assigned ? "assign role" : "remove role").ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<string>> GetUserClientRolesAsync(RealmName realm, string userId, string clientId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get,
+            $"admin/realms/{realm}/users/{userId}/role-mappings/clients/{clientId}", null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "read user roles").ConfigureAwait(false);
+        var roles = await ReadArrayAsync(response, cancellationToken).ConfigureAwait(false);
+        return roles.Select(r => r!["name"]!.GetValue<string>()).ToList();
+    }
+
+    // ---------------------------------------------------------------- User lookup
+
+    public async Task<IReadOnlyList<JsonObject>> SearchUsersAsync(RealmName realm, string? email, int first, int max, CancellationToken cancellationToken)
+    {
+        var query = email is null
+            ? string.Create(CultureInfo.InvariantCulture, $"first={first}&max={max}")
+            : string.Create(CultureInfo.InvariantCulture, $"email={Uri.EscapeDataString(email)}&exact=true&first={first}&max={max}");
+        using var response = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/users?{query}&briefRepresentation=true", null, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, "search users").ConfigureAwait(false);
+        var users = await ReadArrayAsync(response, cancellationToken).ConfigureAwait(false);
+        return users.Select(u => (JsonObject)u!).ToList();
+    }
+
+    public async Task<JsonObject?> GetUserAsync(RealmName realm, string userId, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/users/{Uri.EscapeDataString(userId)}", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        await EnsureSuccessAsync(response, "read user").ConfigureAwait(false);
+        return await ReadObjectAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Generates a new client secret, invalidating the previous one immediately.</summary>
     public async Task<string> RegenerateClientSecretAsync(RealmName realm, string id, CancellationToken cancellationToken)
     {

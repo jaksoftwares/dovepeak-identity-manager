@@ -4,7 +4,7 @@
 
 Dovepeak Identity gives applications a shared, secure identity platform — registration, login, sessions, tokens, roles and a developer portal — so teams stop rebuilding authentication for every product.
 
-> **Status:** Pre-alpha. Phases 0–2 (foundations, architecture validation, core identity platform) are complete. The Management API, developer portal and SDKs follow in Phases 3–5. Not production-ready. See the [implementation plan](implementation-plan.md).
+> **Status:** Pre-alpha. Phases 0–2 (foundations, architecture validation, core identity platform) are complete. Phase 3 (Management API and multi-tenancy) is implemented; Gate G2 awaits the first internal application. The developer portal and SDKs follow in Phases 4–5. Not production-ready. See the [implementation plan](implementation-plan.md).
 
 ---
 
@@ -27,8 +27,9 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 ```text
              public :8080                         local-only :8081
  Browsers ──▶ edge (Traefik) ──▶ Keycloak ◀── admin API ── Management API (:5080)
- Apps         rate limits,        realm per                 workers (audit collection)
-              blocks /admin       tenant environment              │
+ Apps         rate limits,        realm per                 workers (outbox, webhooks,
+              blocks /admin       tenant environment        reconciliation, audit)
+                    │                  │                          │
                     │                  │                          ▼
                     └──── Valkey ◀─────┘                     PostgreSQL
                     (rate-limit counters,             (dovepeak + keycloak databases)
@@ -39,8 +40,8 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 
 ```text
 /docs                       ADRs, threat model, runbooks, validation reports
-/services/management-api    Management API, Keycloak integration library, persistence (EF Core)
-/services/workers           Background workers (audit event collection, retention)
+/services/management-api    Management API, platform services, Keycloak integration library, persistence (EF Core)
+/services/workers           Background workers (outbox, webhooks, reconciliation, audit collection)
 /identity/keycloak          Realm template, user profile, bootstrap script, login theme
 /examples                   Next.js BFF and .NET protected API examples
 /tools                      dovepeak-dev CLI (demo setup, scale test, key rotation)
@@ -86,6 +87,7 @@ The first run downloads images and builds three containers; it can take several 
 | Public identity endpoint  | http://localhost:8080                | Through the edge. `/admin` and the master realm return 403 |
 | Keycloak admin console    | http://localhost:8081/admin          | Direct, local only. Credentials: `KEYCLOAK_ADMIN_*` in `.env` |
 | Management API            | http://localhost:5080/health/ready   | Should return `"status":"Healthy"`                         |
+| Management API OpenAPI    | http://localhost:5080/openapi/v1.json | OpenAPI 3.1 document for `/v1`                            |
 | Keycloak health           | http://localhost:9000/health/ready   |                                                            |
 | Mailpit (email UI)        | http://localhost:8025                | Captures all outgoing email                                |
 | PostgreSQL                | `localhost:5442`                     | Databases: `dovepeak`, `keycloak`                          |
@@ -101,6 +103,26 @@ The [Next.js BFF example](examples/nextjs-bff/README.md) walks through registrat
 dotnet run --project tools/Dovepeak.Identity.DevTool -- demo-setup
 ```
 
+## Management API
+
+The Management API (`/v1`) is how developers and automation configure Dovepeak Identity. The developer portal (Phase 4) is built on it.
+
+| Concept | Notes |
+| ------- | ----- |
+| Resource model | Organization → members, invitations, API keys, webhooks, audit events · Project → development, staging and production environments (one isolated realm each) · Environment → applications (SPA, native, web, machine), roles, end users and sessions |
+| Authentication | Developer access tokens from the `dovepeak-platform` realm (portal client, audience `dovepeak-management-api`), or organization API keys: `Authorization: Bearer dpk_live_…` |
+| Authorization | Organization roles nest: viewer ⊂ developer ⊂ admin ⊂ owner. API keys carry explicit scopes no broader than their creator's; managing the organization, members and API keys is reserved for people |
+| Tenant isolation | Central authorization, EF Core query filters and forced PostgreSQL Row-Level Security; another organization's resources always return `404` ([ADR-0008](docs/adr/0008-tenant-isolation-in-the-management-plane.md)) |
+| Secrets | Client secrets, API keys and webhook signing secrets are shown once at creation and never returned again |
+| Errors | RFC 9457 Problem Details with a stable `code` field (e.g. `quota_exceeded`, `idempotency_key_reused`) |
+| Idempotency | Send `Idempotency-Key` on create requests; a retry with the same body replays the original response (`Idempotent-Replayed: true`) without one-time secrets (`Dovepeak-Secret-Omitted: true`) |
+| Webhooks | HTTPS endpoints receive signed events (`Dovepeak-Signature: t=…,v1=…`, HMAC-SHA256) with retries and exponential backoff; private and link-local addresses are refused |
+| Drift | A worker reconciles every environment with its stored configuration and reverts changes made directly in Keycloak, emitting a `drift.corrected` event |
+
+```bash
+curl -H "Authorization: Bearer $DOVEPEAK_API_KEY"   http://localhost:5080/v1/organizations/$ORG_ID/projects
+```
+
 ---
 
 ## Testing
@@ -108,11 +130,11 @@ dotnet run --project tools/Dovepeak.Identity.DevTool -- demo-setup
 | Suite | Command | Needs the stack |
 | ----- | ------- | --------------- |
 | Unit tests | `dotnet test Dovepeak.Identity.slnx --filter "Category!=Integration"` | No |
-| Integration tests (~85 tests: provisioning, flows, tokens, sessions, recovery, lockout, keys, audit, edge) | `dotnet test tests/Dovepeak.Identity.IntegrationTests` | Yes |
+| Integration tests (provisioning, flows, tokens, sessions, recovery, lockout, keys, audit, edge, Management API, tenant isolation) | `dotnet test tests/Dovepeak.Identity.IntegrationTests` | Yes |
 | BFF end-to-end | `node tests/e2e/bff-smoke.mjs` (see the example README) | Yes, plus the example apps |
 | Log secret scan | `scripts/ci/scan-logs-for-secrets.sh` | Yes, after running the tests |
 
-Integration tests provision their own throwaway tenant realms through the production provisioning code and delete them afterwards. Every suite runs in CI on each pull request.
+Integration tests provision their own throwaway tenant realms through the production provisioning code and delete them afterwards. The Management API tests host the real API in-process, sign developers in through the real platform realm, and remove every organization they create. Every suite runs in CI on each pull request.
 
 ## Developer CLI
 

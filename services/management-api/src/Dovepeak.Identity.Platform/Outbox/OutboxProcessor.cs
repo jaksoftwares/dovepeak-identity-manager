@@ -105,7 +105,12 @@ public sealed partial class OutboxProcessor(IServiceScopeFactory scopeFactory, T
                     }
 
                     var displayName = await DisplayNameAsync(db, environment, ct);
-                    await admin.CreateRealmAsync(RealmName.Parse(environment.RealmName), displayName, ct);
+                    var realm = RealmName.Parse(environment.RealmName);
+                    await admin.CreateRealmAsync(realm, displayName, ct);
+
+                    // New environments start with the project's current branding.
+                    var project = await db.Projects.SingleAsync(p => p.Id == environment.ProjectId, ct);
+                    await admin.ApplyBrandingAsync(realm, Projects.BrandingService.ForProject(project), ct);
                     if (environment.State != ProvisioningState.Ready)
                     {
                         environment.State = ProvisioningState.Ready;

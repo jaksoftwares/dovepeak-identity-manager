@@ -43,6 +43,7 @@
   "refreshTokenMaxReuse": 0,
 
   "eventsEnabled": true,
+  "eventsListeners": ["jboss-logging", "email"],
   "eventsExpiration": 2592000,
   "enabledEventTypes": [
     "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
@@ -65,6 +66,7 @@
 
   "internationalizationEnabled": false,
   "loginTheme": "dovepeak",
+  "emailTheme": "dovepeak",
 
   "browserSecurityHeaders": {
     "contentSecurityPolicyReportOnly": "",
@@ -77,7 +79,7 @@
   },
 
   "attributes": {
-    "dovepeak.templateVersion": "2",
+    "dovepeak.templateVersion": "3",
     "frontendUrl": ""
   },
 

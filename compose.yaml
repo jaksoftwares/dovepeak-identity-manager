@@ -54,6 +54,9 @@ services:
       # Overlapping client secret rotation (realm template profile "dovepeak-secret-rotation"). A Keycloak preview
       # feature: without it, realm provisioning rejects the template. See ADR-0004 and known limitation L-13.
       KC_FEATURES: client-secret-rotation
+      # Security alert emails (realm template "email" event listener): password, credential and lockout changes.
+      # Failed sign-ins are excluded so an attacker cannot flood a user's inbox by guessing passwords.
+      KC_SPI_EVENTS_LISTENER__EMAIL__EXCLUDE_EVENTS: LOGIN_ERROR
       # Public hostname (through the edge proxy) and a separate local-only admin hostname.
       KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8080}
       KC_HOSTNAME_ADMIN: http://localhost:${KEYCLOAK_ADMIN_HOST_PORT:-8081}

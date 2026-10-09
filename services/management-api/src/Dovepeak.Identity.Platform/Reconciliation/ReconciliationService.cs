@@ -82,6 +82,8 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
         }
 
         var baselineDrift = ScalarDrift(template.Baseline(), representation!);
+        baselineDrift.AddRange(BaselineArrays.Where(key =>
+            !SetEquals(representation![key], ((JsonArray)template.Baseline()[key]!).Select(n => n!.GetValue<string>()))));
         if (baselineDrift.Count > 0)
         {
             var restore = new JsonObject();
@@ -110,6 +112,14 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
             await engine.UpdateClientPoliciesAsync(realm, new JsonObject { ["policies"] = desiredPolicies.DeepClone() }, ct);
             await engine.UpdateClientProfilesAsync(realm, new JsonObject { ["profiles"] = desiredProfiles.DeepClone() }, ct);
             Corrected("client_policies_restored", realm.Value);
+        }
+
+        // 1b'. Hosted pages and emails carry the project's branding and email templates, nothing else.
+        var brandingProject = await db.Projects.SingleAsync(p => p.Id == environment.ProjectId, ct);
+        var brandingChanges = await engine.ApplyBrandingAsync(realm, Projects.BrandingService.ForProject(brandingProject), ct);
+        if (brandingChanges.Count > 0)
+        {
+            Corrected("branding_restored", realm.Value, brandingChanges);
         }
 
         // 1c. Environment scopes must exist in the engine and stay in the "scope" claim.
@@ -192,6 +202,9 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
         JsonArray d => actual is JsonArray a && d.Count == a.Count && d.Select((item, i) => IsSubset(item, a[i])).All(x => x),
         _ => actual is JsonValue && actual.ToJsonString() == desired.ToJsonString(),
     };
+
+    /// <summary>Security-relevant list settings: alert emails and the event types the audit pipeline collects.</summary>
+    private static readonly string[] BaselineArrays = ["eventsListeners", "enabledEventTypes"];
 
     private static List<string> ScalarDrift(JsonObject baseline, JsonObject actual) =>
         baseline.Where(p => p.Value is JsonValue && p.Key != "attributes" && actual[p.Key] is { } value

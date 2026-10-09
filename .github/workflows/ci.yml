@@ -51,7 +51,7 @@ jobs:
   integration:
     name: Integration and end-to-end tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +63,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: examples/nextjs-bff/package-lock.json
+          cache-dependency-path: |
+            examples/nextjs-bff/package-lock.json
+            portal/package-lock.json
 
       - name: Start the stack
         run: |
@@ -111,6 +113,14 @@ jobs:
           done
           node tests/e2e/bff-smoke.mjs
 
+      - name: Portal end-to-end tests
+        working-directory: portal
+        run: |
+          npm ci
+          npm run typecheck
+          npx playwright install --with-deps chromium
+          npx playwright test
+
       - name: Scan logs for leaked secrets
         if: always()
         run: scripts/ci/scan-logs-for-secrets.sh .env
@@ -127,6 +137,7 @@ jobs:
           path: |
             TestResults
             openapi-v1.json
+            portal/playwright-report
             stack.log
             protected-api.log
             bff.log
@@ -149,7 +160,7 @@ jobs:
           docker compose config --quiet
 
   container:
-    name: Management API image
+    name: Container images
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -162,6 +173,17 @@ jobs:
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: dovepeak/management-api:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Build portal image
+        run: docker build -t dovepeak/portal:ci portal
+
+      - name: Scan portal image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: dovepeak/portal:ci
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"

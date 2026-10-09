@@ -98,6 +98,19 @@ public sealed class Project : ITenantOwned
 
     public required string Name { get; set; }
 
+    /// <summary>Branding for hosted sign-in pages and emails in all of the project's environments (ADR-0010). Null uses platform defaults.</summary>
+    public string? BrandLogoUrl { get; set; }
+
+    public string? BrandPrimaryColor { get; set; }
+
+    public string? EmailVerificationSubject { get; set; }
+
+    public string? EmailVerificationIntro { get; set; }
+
+    public string? PasswordResetSubject { get; set; }
+
+    public string? PasswordResetIntro { get; set; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 

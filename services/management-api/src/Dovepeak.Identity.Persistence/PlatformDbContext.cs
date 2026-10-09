@@ -142,6 +142,12 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
             entity.HasKey(p => p.Id);
             entity.Property(p => p.Slug).HasMaxLength(63);
             entity.Property(p => p.Name).HasMaxLength(200);
+            entity.Property(p => p.BrandLogoUrl).HasMaxLength(500);
+            entity.Property(p => p.BrandPrimaryColor).HasMaxLength(7);
+            entity.Property(p => p.EmailVerificationSubject).HasMaxLength(150);
+            entity.Property(p => p.EmailVerificationIntro).HasMaxLength(1000);
+            entity.Property(p => p.PasswordResetSubject).HasMaxLength(150);
+            entity.Property(p => p.PasswordResetIntro).HasMaxLength(1000);
             entity.HasIndex(p => new { p.OrganizationId, p.Slug }).IsUnique();
             entity.HasOne<Organization>().WithMany().HasForeignKey(p => p.OrganizationId).OnDelete(DeleteBehavior.Restrict);
         });

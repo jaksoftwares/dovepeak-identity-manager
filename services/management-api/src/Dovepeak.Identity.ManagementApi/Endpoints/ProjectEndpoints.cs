@@ -46,6 +46,12 @@ internal static class ProjectEndpoints
             return Results.NoContent();
         }).WithTags("Projects");
 
+        // Branding and email templates for every environment of the project (ADR-0010).
+        org.MapGet("/projects/{projectId:guid}/branding", (Guid orgId, Guid projectId, BrandingService s, CancellationToken ct) =>
+            s.GetAsync(orgId, projectId, ct)).WithTags("Branding");
+        org.MapPut("/projects/{projectId:guid}/branding", (Guid orgId, Guid projectId, ProjectBranding branding, BrandingService s, CancellationToken ct) =>
+            s.UpdateAsync(orgId, projectId, branding, ct)).WithTags("Branding");
+
         var env = org.MapGroup("/projects/{projectId:guid}/environments/{environmentId:guid}");
         env.MapGet("", (Guid orgId, Guid projectId, Guid environmentId, ProjectService s, CancellationToken ct) =>
             s.GetEnvironmentAsync(orgId, projectId, environmentId, ct)).WithTags("Environments");

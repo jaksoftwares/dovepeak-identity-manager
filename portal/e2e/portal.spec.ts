@@ -64,11 +64,13 @@ test("a new developer onboards an application end to end", async ({ page, contex
   await page.getByLabel("Name").fill(orgName);
   await page.getByLabel(/^Slug/).fill(`portal-${suffix}`);
   await page.getByRole("button", { name: "Create organization" }).click();
+  await expect(page).toHaveURL(/\/orgs\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { name: orgName })).toBeVisible();
   const orgUrl = page.url();
   const orgId = orgUrl.split("/orgs/")[1]!;
 
   await page.getByRole("link", { name: "Projects", exact: true }).click();
+  await expect(page).toHaveURL(/\/projects$/);
   await page.getByLabel("Name").fill("Storefront");
   await page.getByLabel(/^Slug/).fill("storefront");
   await page.getByRole("button", { name: "Create project" }).click();
@@ -81,10 +83,12 @@ test("a new developer onboards an application end to end", async ({ page, contex
     await expect(page.getByTestId("env-production")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 120_000 });
   await page.getByTestId("env-development").click();
+  await expect(page).toHaveURL(/\/environments\/[0-9a-f-]+$/);
   const envUrl = page.url();
 
   // ---------------------------------------------------------------- Scope and machine application
   await page.getByRole("link", { name: "API scopes" }).click();
+  await expect(page).toHaveURL(/\/scopes$/);
   await page.getByLabel("Name").fill("orders:read");
   await page.getByLabel("Description").fill("Read orders");
   await page.getByRole("button", { name: "Create scope" }).click();
@@ -100,24 +104,28 @@ test("a new developer onboards an application end to end", async ({ page, contex
   const clientId = (await page.getByRole("status").first().textContent())!.match(/app_[a-z2-7]+/)![0];
 
   await page.getByRole("link", { name: "order-sync" }).click();
+  await expect(page).toHaveURL(/\/applications\/[0-9a-f-]+$/);
   await page.getByRole("link", { name: "Integration" }).click();
+  await expect(page).toHaveURL(/\/integration$/);
   const issuer = (await page.getByTestId("integration-config").locator("tr", { hasText: "Issuer" }).locator("td").nth(1).textContent())!.trim();
   const appUrl = page.url().replace(/\/integration$/, "");
 
   const token = await clientCredentials(issuer, clientId, firstSecret, "orders:read");
   expect(token.status).toBe(200);
   expect(String(token.json["scope"])).toContain("orders:read");
-  expect(token.json["expires_in"]).toBe(600);
+  expect(Number(token.json["expires_in"])).toBeGreaterThanOrEqual(598); // Keycloak rounds to the second
+  expect(Number(token.json["expires_in"])).toBeLessThanOrEqual(600);
 
   // ---------------------------------------------------------------- Token policy
   await page.goto(appUrl);
   await page.getByLabel(/^Access token lifetime/).fill("900");
   await page.getByRole("button", { name: "Save settings" }).click();
   await success(page, "Settings saved");
-  expect((await clientCredentials(issuer, clientId, firstSecret)).json["expires_in"]).toBe(900);
+  expect(Number((await clientCredentials(issuer, clientId, firstSecret)).json["expires_in"])).toBeGreaterThanOrEqual(898);
 
   // ---------------------------------------------------------------- Rotation with overlap, then revocation
   await page.getByRole("link", { name: "Credentials" }).click();
+  await expect(page).toHaveURL(/\/credentials$/);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Issue a new secret" }).click();
   const secondSecret = await oneTimeSecret(page);
@@ -140,6 +148,7 @@ test("a new developer onboards an application end to end", async ({ page, contex
 
   // ---------------------------------------------------------------- Roles
   await page.getByRole("link", { name: "Roles" }).click();
+  await expect(page).toHaveURL(/\/roles$/);
   await page.getByLabel(/^Name/).fill("administrator");
   await page.getByRole("button", { name: "Create role" }).click();
   await success(page, "administrator created");
@@ -160,7 +169,7 @@ test("a new developer onboards an application end to end", async ({ page, contex
   expect((await withKey()).status).toBe(200);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Revoke" }).click();
-  await success(page, "revoked");
+  await expect(page.getByRole("row", { name: /ci-deploy/ })).toContainText("revoked");
   expect((await withKey()).status).toBe(401);
 
   await page.goto(`${orgUrl}/webhooks`);
@@ -191,6 +200,7 @@ test("a new developer onboards an application end to end", async ({ page, contex
 
   await page.goto(`${orgUrl}/projects`);
   await page.getByRole("link", { name: "Storefront" }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/);
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete project" }).click();
   await expect(page).toHaveURL(`${orgUrl}/projects`);
@@ -215,6 +225,8 @@ test("portal pages are protected and send security headers", async ({ request })
 
   const home = await request.get("/");
   expect(home.headers()["x-frame-options"]).toBe("DENY");
+  // "no-referrer" would make browsers send Origin: null on the sign-out POST and break the CSRF check.
+  expect(home.headers()["referrer-policy"]).toBe("same-origin");
   expect(home.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
 
   const crossSiteLogout = await request.post("/api/auth/logout", { headers: { Origin: "https://evil.example" }, maxRedirects: 0 });

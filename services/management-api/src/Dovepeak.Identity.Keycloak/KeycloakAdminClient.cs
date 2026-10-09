@@ -191,6 +191,63 @@ public sealed class KeycloakAdminClient(
     private static string Path(ClientScopeAssignment assignment) =>
         assignment == ClientScopeAssignment.Optional ? "optional-client-scopes" : "default-client-scopes";
 
+    // ---------------------------------------------------------------- Realm localization (tenant branding)
+
+    /// <summary>The realm's localization overrides for a locale (texts that replace theme messages for this realm only).</summary>
+    public async Task<IReadOnlyDictionary<string, string>> GetRealmLocalizationAsync(RealmName realm, string locale, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(HttpMethod.Get, $"admin/realms/{realm}/localization/{locale}", null, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new Dictionary<string, string>();
+        }
+
+        await EnsureSuccessAsync(response, "read realm localization").ConfigureAwait(false);
+        var texts = await ReadObjectAsync(response, cancellationToken).ConfigureAwait(false);
+        return texts.ToDictionary(t => t.Key, t => t.Value?.GetValue<string>() ?? string.Empty, StringComparer.Ordinal);
+    }
+
+    /// <summary>Sets one override, or removes it when <paramref name="value"/> is null.</summary>
+    public async Task SetRealmLocalizationTextAsync(RealmName realm, string locale, string key, string? value, CancellationToken cancellationToken)
+    {
+        var path = $"admin/realms/{realm}/localization/{locale}/{Uri.EscapeDataString(key)}";
+        if (value is null)
+        {
+            using var delete = await SendAsync(HttpMethod.Delete, path, null, cancellationToken).ConfigureAwait(false);
+            if (delete.StatusCode != HttpStatusCode.NotFound)
+            {
+                await EnsureSuccessAsync(delete, $"remove localization text '{key}'").ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        using var put = await SendContentAsync(HttpMethod.Put, path, new StringContent(value, System.Text.Encoding.UTF8, "text/plain"), cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(put, $"set localization text '{key}'").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Makes the realm's managed localization texts exactly the desired ones. Returns the keys that changed.
+    /// Keys the platform does not manage are never touched.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ApplyBrandingAsync(RealmName realm, TenantBranding branding, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(branding);
+        var current = await GetRealmLocalizationAsync(realm, TenantBranding.Locale, cancellationToken).ConfigureAwait(false);
+        var changed = new List<string>();
+        foreach (var (key, desired) in branding.ToLocalizationTexts())
+        {
+            var actual = current.TryGetValue(key, out var value) ? value : null;
+            if (!string.Equals(actual, desired, StringComparison.Ordinal))
+            {
+                await SetRealmLocalizationTextAsync(realm, TenantBranding.Locale, key, desired, cancellationToken).ConfigureAwait(false);
+                changed.Add(key);
+            }
+        }
+
+        return changed;
+    }
+
     // ---------------------------------------------------------------- Client policies
 
     /// <summary>The realm's own client profiles (excluding Keycloak's global ones), as <c>{"profiles": [...]}</c>.</summary>
@@ -630,16 +687,16 @@ public sealed class KeycloakAdminClient(
 
     // ---------------------------------------------------------------- Plumbing
 
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, JsonNode? body, CancellationToken cancellationToken)
+    private Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, JsonNode? body, CancellationToken cancellationToken) =>
+        SendContentAsync(method, path, body is null ? null : JsonContent.Create(body), cancellationToken);
+
+    private async Task<HttpResponseMessage> SendContentAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
     {
         var token = await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
 
         using var request = new HttpRequestMessage(method, new Uri(path, UriKind.Relative));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        if (body is not null)
-        {
-            request.Content = JsonContent.Create(body);
-        }
+        request.Content = content;
 
         return await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }

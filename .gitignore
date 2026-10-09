@@ -21,6 +21,8 @@ coverage*.json
 
 # Node / TypeScript
 node_modules/
+playwright-report/
+test-results/
 .next/
 dist/
 out/

@@ -8,6 +8,7 @@
   --dp-navy: #000027;
   --dp-orange: #ff6300;
   --dp-orange-dark: #d95400;
+  --dp-on-orange: #ffffff;
   --dp-ghost: #f8f8ff;
 
   --keycloak-card-top-color: var(--dp-orange);
@@ -17,6 +18,8 @@
   --pf-v5-global--link--Color: #b84300;
   --pf-v5-global--link--Color--hover: var(--dp-navy);
   --pf-v5-c-button--m-primary--BackgroundColor: var(--dp-orange);
+  --pf-v5-c-button--m-primary--Color: var(--dp-on-orange);
+  --pf-v5-c-button--m-primary--hover--Color: var(--dp-on-orange);
   --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--dp-orange-dark);
   --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--dp-orange-dark);
   --pf-v5-c-button--m-primary--active--BackgroundColor: var(--dp-orange-dark);
@@ -62,4 +65,13 @@
 .pf-v5-c-form-control:focus-within {
   outline: 3px solid var(--dp-orange);
   outline-offset: 2px;
+}
+
+/* Tenant logo (project branding), shown above the tenant name. */
+.dp-tenant-logo {
+  display: block;
+  max-height: 56px;
+  max-width: 240px;
+  margin: 0 auto 12px;
+  object-fit: contain;
 }

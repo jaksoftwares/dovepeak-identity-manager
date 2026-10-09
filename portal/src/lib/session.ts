@@ -8,15 +8,18 @@ import { refreshTokens, type PendingAuthorization, type TokenSet } from "./oidc"
 // Backend-for-frontend session store. Tokens live only on the server (in Valkey); the browser holds an opaque,
 // HttpOnly session identifier. This keeps access and refresh tokens out of reach of browser JavaScript.
 
-export const SESSION_COOKIE = secureCookies ? "__Host-dp_portal" : "dp_portal";
-export const TRANSACTION_COOKIE = secureCookies ? "__Host-dp_portal_tx" : "dp_portal_tx";
+export const SESSION_COOKIE = secureCookies() ? "__Host-dp_portal" : "dp_portal";
+export const TRANSACTION_COOKIE = secureCookies() ? "__Host-dp_portal_tx" : "dp_portal_tx";
 
 const TRANSACTION_TTL_SECONDS = 600;
 const REFRESH_LEEWAY_MS = 30_000;
 const REFRESH_LOCK_MS = 10_000;
 
 const globalForRedis = globalThis as unknown as { dovepeakPortalRedis?: Redis };
-const redis = (globalForRedis.dovepeakPortalRedis ??= new Redis(config.sessionRedisUrl, { lazyConnect: false }));
+/** Connects on first use, so importing this module (for example during the build) needs no configuration. */
+function store(): Redis {
+  return (globalForRedis.dovepeakPortalRedis ??= new Redis(config.sessionRedisUrl));
+}
 
 export interface SessionUser {
   sub: string;
@@ -31,7 +34,7 @@ export interface Session {
 
 export const cookieOptions = (maxAgeSeconds: number) => ({
   httpOnly: true,
-  secure: secureCookies,
+  secure: secureCookies(),
   sameSite: "lax" as const,
   path: "/",
   maxAge: maxAgeSeconds,
@@ -45,13 +48,13 @@ const transactionKey = (id: string) => `portal:tx:${id}`;
 
 export async function saveTransaction(pending: PendingAuthorization): Promise<string> {
   const id = newId();
-  await redis.set(transactionKey(id), JSON.stringify(pending), "EX", TRANSACTION_TTL_SECONDS);
+  await store().set(transactionKey(id), JSON.stringify(pending), "EX", TRANSACTION_TTL_SECONDS);
   return id;
 }
 
 /** Reads and deletes the pending authorization: each one can complete only once. */
 export async function takeTransaction(id: string): Promise<PendingAuthorization | null> {
-  const value = await redis.getdel(transactionKey(id));
+  const value = await store().getdel(transactionKey(id));
   return value ? (JSON.parse(value) as PendingAuthorization) : null;
 }
 
@@ -61,17 +64,17 @@ export { TRANSACTION_TTL_SECONDS };
 
 export async function createSession(session: Session): Promise<string> {
   const id = newId();
-  await redis.set(sessionKey(id), JSON.stringify(session), "EX", session.tokens.refreshTokenExpiresInSeconds);
+  await store().set(sessionKey(id), JSON.stringify(session), "EX", session.tokens.refreshTokenExpiresInSeconds);
   return id;
 }
 
 export async function deleteSession(id: string): Promise<Session | null> {
-  const value = await redis.getdel(sessionKey(id));
+  const value = await store().getdel(sessionKey(id));
   return value ? (JSON.parse(value) as Session) : null;
 }
 
 async function readSession(id: string): Promise<Session | null> {
-  const value = await redis.get(sessionKey(id));
+  const value = await store().get(sessionKey(id));
   return value ? (JSON.parse(value) as Session) : null;
 }
 
@@ -101,7 +104,7 @@ export async function validAccessToken(): Promise<string | null> {
 
   const lockKey = `portal:lock:${current.id}`;
   const lockToken = newId();
-  const acquired = await redis.set(lockKey, lockToken, "PX", REFRESH_LOCK_MS, "NX");
+  const acquired = await store().set(lockKey, lockToken, "PX", REFRESH_LOCK_MS, "NX");
 
   if (acquired) {
     try {
@@ -113,7 +116,7 @@ export async function validAccessToken(): Promise<string | null> {
 
       const tokens = await refreshTokens(session.tokens.refreshToken, session.tokens.idToken);
       const updated: Session = { ...session, tokens };
-      await redis.set(sessionKey(current.id), JSON.stringify(updated), "EX", tokens.refreshTokenExpiresInSeconds);
+      await store().set(sessionKey(current.id), JSON.stringify(updated), "EX", tokens.refreshTokenExpiresInSeconds);
       return tokens.accessToken;
     } catch {
       // Refresh failed (session expired, revoked or reuse detected): end the local session too.
@@ -121,7 +124,7 @@ export async function validAccessToken(): Promise<string | null> {
       return null;
     } finally {
       // Release only our own lock.
-      if ((await redis.get(lockKey)) === lockToken) await redis.del(lockKey);
+      if ((await store().get(lockKey)) === lockToken) await store().del(lockKey);
     }
   }
 

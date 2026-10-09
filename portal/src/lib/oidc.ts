@@ -4,8 +4,6 @@ import { config, redirectUri } from "./config";
 
 // The portal is a public client (no secret) of the platform realm: Authorization Code + PKCE, with tokens held on
 // the server. Plain HTTP is only tolerated for a loopback issuer during local development.
-const insecureLocalIssuer =
-  config.issuer.protocol === "http:" && ["localhost", "127.0.0.1"].includes(config.issuer.hostname);
 
 /**
  * Server-to-identity-engine calls. In containers the public issuer origin (e.g. localhost:8080) is not reachable,
@@ -22,12 +20,16 @@ const customFetch: typeof fetch = (input, init) => {
   return fetch(url, init);
 };
 
-const requestOptions = {
-  [oauth.customFetch]: customFetch,
-  ...(insecureLocalIssuer || config.identityInternalUrl?.protocol === "http:" ? { [oauth.allowInsecureRequests]: true } : {}),
-};
+function requestOptions() {
+  const issuer = config.issuer;
+  const insecureLocalIssuer = issuer.protocol === "http:" && ["localhost", "127.0.0.1"].includes(issuer.hostname);
+  return {
+    [oauth.customFetch]: customFetch,
+    ...(insecureLocalIssuer || config.identityInternalUrl?.protocol === "http:" ? { [oauth.allowInsecureRequests]: true } : {}),
+  };
+}
 
-const client: oauth.Client = { client_id: config.clientId };
+const client = (): oauth.Client => ({ client_id: config.clientId });
 const clientAuth = oauth.None();
 
 let discovery: Promise<oauth.AuthorizationServer> | undefined;
@@ -35,7 +37,7 @@ let discovery: Promise<oauth.AuthorizationServer> | undefined;
 /** OpenID Connect discovery, cached for the process lifetime. */
 export function authorizationServer(): Promise<oauth.AuthorizationServer> {
   discovery ??= oauth
-    .discoveryRequest(config.issuer, requestOptions)
+    .discoveryRequest(config.issuer, requestOptions())
     .then((response) => oauth.processDiscoveryResponse(config.issuer, response))
     .catch((error: unknown) => {
       discovery = undefined;
@@ -79,7 +81,7 @@ export async function createAuthorizationUrl(options: { register: boolean; retur
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
-  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("redirect_uri", redirectUri());
   url.searchParams.set("state", pending.state);
   url.searchParams.set("nonce", pending.nonce);
   url.searchParams.set("code_challenge", await oauth.calculatePKCECodeChallenge(pending.codeVerifier));
@@ -110,11 +112,11 @@ function toTokenSet(result: oauth.TokenEndpointResponse, previousIdToken?: strin
 /** Validates the callback (state, iss), exchanges the code with PKCE and validates the ID token (incl. nonce). */
 export async function completeAuthorization(callbackUrl: URL, pending: PendingAuthorization) {
   const as = await authorizationServer();
-  const params = oauth.validateAuthResponse(as, client, callbackUrl, pending.state);
+  const params = oauth.validateAuthResponse(as, client(), callbackUrl, pending.state);
   const response = await oauth.authorizationCodeGrantRequest(
-    as, client, clientAuth, params, redirectUri, pending.codeVerifier, requestOptions,
+    as, client(), clientAuth, params, redirectUri(), pending.codeVerifier, requestOptions(),
   );
-  const result = await oauth.processAuthorizationCodeResponse(as, client, response, {
+  const result = await oauth.processAuthorizationCodeResponse(as, client(), response, {
     expectedNonce: pending.nonce,
     requireIdToken: true,
   });
@@ -133,8 +135,8 @@ export async function completeAuthorization(callbackUrl: URL, pending: PendingAu
 /** Refresh grant. The identity provider rotates the refresh token on every call. */
 export async function refreshTokens(refreshToken: string, previousIdToken: string): Promise<TokenSet> {
   const as = await authorizationServer();
-  const response = await oauth.refreshTokenGrantRequest(as, client, clientAuth, refreshToken, requestOptions);
-  const result = await oauth.processRefreshTokenResponse(as, client, response);
+  const response = await oauth.refreshTokenGrantRequest(as, client(), clientAuth, refreshToken, requestOptions());
+  const result = await oauth.processRefreshTokenResponse(as, client(), response);
   return toTokenSet(result, previousIdToken);
 }
 

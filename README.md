@@ -4,7 +4,7 @@
 
 Dovepeak Identity gives applications a shared, secure identity platform — registration, login, sessions, tokens, roles and a developer portal — so teams stop rebuilding authentication for every product.
 
-> **Status:** Pre-alpha. Phases 0–2 (foundations, architecture validation, core identity platform) are complete. Phase 3 (Management API and multi-tenancy) is implemented; Gate G2 awaits the first internal application. The developer portal and SDKs follow in Phases 4–5. Not production-ready. See the [implementation plan](implementation-plan.md).
+> **Status:** Pre-alpha. Phases 0–3 (foundations, architecture validation, core identity platform, Management API and multi-tenancy) are complete; Gate G2 awaits the first internal application. Phase 4 (developer portal) is implemented except per-tenant branding and email templates. SDKs follow in Phase 5. Not production-ready. See the [implementation plan](implementation-plan.md).
 
 ---
 
@@ -25,7 +25,8 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 ## Architecture (current)
 
 ```text
-             public :8080                         local-only :8081
+                                       Developers ──▶ Portal (:3100) ──┐
+             public :8080                         local-only :8081   ▼
  Browsers ──▶ edge (Traefik) ──▶ Keycloak ◀── admin API ── Management API (:5080)
  Apps         rate limits,        realm per                 workers (outbox, webhooks,
               blocks /admin       tenant environment        reconciliation, audit)
@@ -33,7 +34,7 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
                     │                  │                          ▼
                     └──── Valkey ◀─────┘                     PostgreSQL
                     (rate-limit counters,             (dovepeak + keycloak databases)
-                     BFF sessions)
+                     BFF and portal sessions)
 ```
 
 ## Repository Layout
@@ -48,7 +49,8 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 /deploy                     Local edge and database configuration
 /tests                      Integration tests (.NET) and end-to-end tests (Node)
 /scripts                    CI scripts (log secret scanning)
-/portal, /sdks              Developer portal and SDKs (Phases 4–5)
+/portal                     Developer portal (Next.js backend-for-frontend) with built-in documentation
+/sdks                       SDKs (Phase 5)
 /branding                   Brand assets and guidelines
 ```
 
@@ -88,6 +90,7 @@ The first run downloads images and builds three containers; it can take several 
 | Keycloak admin console    | http://localhost:8081/admin          | Direct, local only. Credentials: `KEYCLOAK_ADMIN_*` in `.env` |
 | Management API            | http://localhost:5080/health/ready   | Should return `"status":"Healthy"`                         |
 | Management API OpenAPI    | http://localhost:5080/openapi/v1.json | OpenAPI 3.1 document for `/v1`                            |
+| Developer portal          | http://localhost:3100                | Create an account, then an organization and a project. Docs at `/docs` |
 | Keycloak health           | http://localhost:9000/health/ready   |                                                            |
 | Mailpit (email UI)        | http://localhost:8025                | Captures all outgoing email                                |
 | PostgreSQL                | `localhost:5442`                     | Databases: `dovepeak`, `keycloak`                          |
@@ -95,7 +98,11 @@ The first run downloads images and builds three containers; it can take several 
 
 All ports are bound to `127.0.0.1` and are not reachable from your network.
 
-### 4. Try a real sign-in
+### 4. Open the developer portal
+
+Go to http://localhost:3100, choose **Create an account**, and confirm the email in Mailpit (http://localhost:8025). Then create an organization, a project and an application; the **Integration** tab shows everything your app needs.
+
+### 5. Try a real sign-in in an example app
 
 The [Next.js BFF example](examples/nextjs-bff/README.md) walks through registration, email verification and calling a protected API:
 
@@ -134,6 +141,7 @@ curl -H "Authorization: Bearer $DOVEPEAK_API_KEY"   http://localhost:5080/v1/org
 | Unit tests | `dotnet test Dovepeak.Identity.slnx --filter "Category!=Integration"` | No |
 | Integration tests (provisioning, flows, tokens, sessions, recovery, lockout, keys, audit, edge, Management API, tenant isolation) | `dotnet test tests/Dovepeak.Identity.IntegrationTests` | Yes |
 | BFF end-to-end | `node tests/e2e/bff-smoke.mjs` (see the example README) | Yes, plus the example apps |
+| Portal end-to-end (Playwright: the whole developer journey in a real browser) | `cd portal && npx playwright install chromium && npx playwright test` | Yes |
 | Log secret scan | `scripts/ci/scan-logs-for-secrets.sh` | Yes, after running the tests |
 
 Integration tests provision their own throwaway tenant realms through the production provisioning code and delete them afterwards. The Management API tests host the real API in-process, sign developers in through the real platform realm, and remove every organization they create. `DeployedStackTests` exercises the containerized API and workers with no in-process shortcuts. Every suite runs in CI on each pull request.

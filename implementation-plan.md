@@ -381,10 +381,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.1
 
-- [ ] Next.js with TypeScript.
-- [ ] Design tokens and components from the Dovepeak brand guidelines.
-- [ ] Login through the "platform" realm.
-- [ ] Layout, navigation and error handling.
+- [x] Next.js with TypeScript. *(`portal/`: App Router, Server Components and Server Actions; backend-for-frontend — ADR-0009.)*
+- [x] Design tokens and components from the Dovepeak brand guidelines.
+- [x] Login through the "platform" realm. *(Authorization Code + PKCE; tokens in Valkey, HttpOnly session cookie; account creation with email verification.)*
+- [x] Layout, navigation and error handling.
 
 **Done when:** a developer can sign in and sign out of the portal.
 
@@ -392,8 +392,8 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M4.1, M3.4
 
-- [ ] Organization settings and member management.
-- [ ] Project and environment creation and listing.
+- [x] Organization settings and member management.
+- [x] Project and environment creation and listing.
 
 **Done when:** a developer can create an organization, invite a member and create a project from the portal.
 
@@ -401,12 +401,12 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M4.2, M3.5
 
-- [ ] Application creation by type.
-- [ ] Callback URLs, logout URLs and allowed origins.
-- [ ] Authentication methods, token and session policies.
-- [ ] Branding and hosted login page settings, including per-tenant logo and colours (carried from M1.5).
+- [x] Application creation by type.
+- [x] Callback URLs, logout URLs and allowed origins.
+- [x] Authentication methods, token and session policies. *(Plus audiences and OAuth scopes.)*
+- [ ] Branding and hosted login page settings, including per-tenant logo and colours (carried from M1.5). *(Not started: needs per-tenant theme support in Keycloak.)*
 - [ ] Branded email templates, security alert emails and per-tenant template overrides (carried from M2.2).
-- [ ] Email template editor.
+- [ ] Email template editor. *(Not started; depends on the branded templates above.)*
 
 **Done when:** every application setting in the Management API can be changed from the portal.
 
@@ -414,8 +414,8 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M4.3, M3.6
 
-- [ ] Create, rotate and revoke credentials, with secrets shown once.
-- [ ] Active session listing and revocation.
+- [x] Create, rotate and revoke credentials, with secrets shown once. *(Client secrets with 24-hour overlap and immediate revocation; API keys; webhook signing secrets.)*
+- [x] Active session listing and revocation.
 
 **Done when:** a revoked credential or session stops working, and secrets cannot be viewed again.
 
@@ -423,9 +423,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M4.4, M3.9
 
-- [ ] Dashboard with authentication activity, failures and security events.
-- [ ] Filterable audit log.
-- [ ] Webhook configuration and delivery history.
+- [x] Dashboard with authentication activity, failures and security events.
+- [x] Filterable audit log.
+- [x] Webhook configuration and delivery history.
 
 **Done when:** events from a test application appear on the dashboard and in the audit log.
 
@@ -433,11 +433,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M4.5
 
-- [ ] Per-application integration tab with pre-filled client ID and URLs.
-- [ ] Documentation site (Docusaurus or Nextra).
-- [ ] Getting-started and framework guides.
-- [ ] API reference generated from OpenAPI.
-- [ ] Error reference and troubleshooting.
+- [x] Per-application integration tab with pre-filled client ID and URLs.
+- [x] Documentation site. *(Built into the portal at `/docs` instead of Docusaurus or Nextra — ADR-0009.)*
+- [x] Getting-started and framework guides. *(Next.js BFF, ASP.NET Core and Node.js APIs, automation and webhooks.)*
+- [x] API reference generated from OpenAPI. *(Rendered from the live document.)*
+- [x] Error reference and troubleshooting.
 
 **Done when:** a developer new to the platform reaches a working login using only the portal and documentation.
 

@@ -4,7 +4,9 @@ const issuerOrigin = process.env.PLATFORM_ISSUER ? new URL(process.env.PLATFORM_
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "Referrer-Policy", value: "no-referrer" },
+  // "same-origin", not "no-referrer": with no-referrer browsers send Origin: null on form POSTs, which defeats the
+  // Origin check on sign-out. Cross-site requests still carry no referrer.
+  { key: "Referrer-Policy", value: "same-origin" },
   { key: "X-Frame-Options", value: "DENY" },
   {
     key: "Content-Security-Policy",

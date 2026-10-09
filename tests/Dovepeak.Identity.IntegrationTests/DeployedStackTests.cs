@@ -37,6 +37,21 @@ public sealed class DeployedStackTests
         var envPath = $"{projectPath}/environments/{development["id"]!.GetValue<string>()}";
         var realms = environments.Select(e => RealmName.ForEnvironment(Guid.Parse(e["id"]!.GetValue<string>()))).ToList();
 
+        // Realms provisioned by the workers can send email (verification, recovery, security alerts).
+        var developmentRealm = RealmName.ForEnvironment(Guid.Parse(development["id"]!.GetValue<string>()));
+        var endUser = $"deployed-{Guid.NewGuid():N}@example.test";
+        var endUserId = await KeycloakAdmin.Client.CreateUserAsync(developmentRealm, endUser, $"Pw-{Guid.NewGuid():N}", emailVerified: false, CancellationToken.None);
+        var adminToken = await KeycloakAdmin.TokenProvider.GetTokenAsync(CancellationToken.None);
+        using (var admin = new HttpClient { BaseAddress = StackSettings.Current.KeycloakAdminUrl })
+        using (var send = new HttpRequestMessage(HttpMethod.Put, $"admin/realms/{developmentRealm}/users/{endUserId}/send-verify-email"))
+        {
+            send.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+            using var sent = await admin.SendAsync(send);
+            Assert.True(sent.IsSuccessStatusCode, $"send-verify-email returned {(int)sent.StatusCode}");
+        }
+
+        Assert.Contains("Secured by Dovepeak Identity", (await Mailpit.WaitForMessageAsync(endUser, "Verify your email")).Html, StringComparison.Ordinal);
+
         // Configure a scope and a machine application, then obtain a token from the tenant's issuer.
         (await developer.PostAsync($"{envPath}/scopes", new { name = "orders:read" })).Expect(HttpStatusCode.Created);
         var app = (await developer.PostAsync($"{envPath}/applications", new

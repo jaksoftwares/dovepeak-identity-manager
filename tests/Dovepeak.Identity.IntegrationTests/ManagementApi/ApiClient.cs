@@ -44,7 +44,7 @@ public sealed class ApiClient(HttpClient http, string? userId, string? email) : 
 
     public Task<ApiResponse> PatchAsync(string path, object body) => SendAsync(HttpMethod.Patch, path, body);
 
-    public Task<ApiResponse> PutAsync(string path) => SendAsync(HttpMethod.Put, path);
+    public Task<ApiResponse> PutAsync(string path, object? body = null) => SendAsync(HttpMethod.Put, path, body);
 
     public Task<ApiResponse> DeleteAsync(string path) => SendAsync(HttpMethod.Delete, path);
 

@@ -19,7 +19,7 @@ public sealed class PasswordRecoveryTests(TestRealm realm) : IClassFixture<TestR
         var confirmation = await RequestResetAsync(browser, request, user.Email);
         Assert.Contains(RecoveryConfirmation, confirmation.Text, StringComparison.Ordinal);
 
-        var email = await Mailpit.WaitForMessageAsync(user.Email, "Reset password");
+        var email = await Mailpit.WaitForMessageAsync(user.Email, "Reset your password");
         var updatePage = (await browser.GetAsync(email.ActionLink())).RequirePage();
         var callback = (await browser.SubmitAsync(updatePage, "kc-passwd-update-form", new Dictionary<string, string>
         {
@@ -54,7 +54,7 @@ public sealed class PasswordRecoveryTests(TestRealm realm) : IClassFixture<TestR
         Assert.Contains(RecoveryConfirmation, forKnown.Text, StringComparison.Ordinal);
         Assert.Equal(forKnown.StatusCode, forUnknown.StatusCode);
 
-        await Mailpit.WaitForMessageAsync(known.Email, "Reset password");
+        await Mailpit.WaitForMessageAsync(known.Email, "Reset your password");
         Assert.Equal(0, await Mailpit.CountMessagesAsync(unknown));
     }
 
@@ -66,7 +66,7 @@ public sealed class PasswordRecoveryTests(TestRealm realm) : IClassFixture<TestR
         var request = realm.WebApp.CreateAuthorizationRequest();
         using var browser = new BrowserSession(TestRealm.RedirectUri);
         await RequestResetAsync(browser, request, user.Email);
-        var link = (await Mailpit.WaitForMessageAsync(user.Email, "Reset password")).ActionLink();
+        var link = (await Mailpit.WaitForMessageAsync(user.Email, "Reset your password")).ActionLink();
 
         var updatePage = (await browser.GetAsync(link)).RequirePage();
         (await browser.SubmitAsync(updatePage, "kc-passwd-update-form", new Dictionary<string, string>

@@ -114,6 +114,12 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
             Corrected("client_policies_restored", realm.Value);
         }
 
+        // 1a. The realm must be able to send email (verification, recovery, security alerts).
+        if (await engine.EnsureRealmSmtpAsync(realm, representation!, ct))
+        {
+            Corrected("smtp_restored", realm.Value);
+        }
+
         // 1b'. Hosted pages and emails carry the project's branding and email templates, nothing else.
         var brandingProject = await db.Projects.SingleAsync(p => p.Id == environment.ProjectId, ct);
         var brandingChanges = await engine.ApplyBrandingAsync(realm, Projects.BrandingService.ForProject(brandingProject), ct);

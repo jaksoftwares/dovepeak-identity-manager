@@ -66,7 +66,8 @@ public sealed class RealmTemplate
             ?? throw new InvalidOperationException($"Embedded resource '{name}' must be a JSON object.");
     }
 
-    private static JsonObject BuildSmtp(SmtpOptions smtp)
+    /// <summary>The realm SMTP server representation for the configured mail settings.</summary>
+    public static JsonObject BuildSmtp(SmtpOptions smtp)
     {
         // Keycloak expects every SMTP setting as a string.
         var server = new JsonObject

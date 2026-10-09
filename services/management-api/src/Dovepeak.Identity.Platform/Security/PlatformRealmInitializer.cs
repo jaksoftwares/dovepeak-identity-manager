@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Nodes;
 using Dovepeak.Identity.Keycloak;
 using Dovepeak.Identity.Platform.Common;
 using Microsoft.Extensions.Options;
@@ -30,10 +31,13 @@ public sealed class PlatformRealmInitializer(KeycloakAdminClient engine, IOption
         // Several API replicas (or a replica and an operator tool) may run this at the same moment. Keycloak answers a
         // concurrent update of the same client with 409; the other writer applied the same desired state, so re-read
         // and converge rather than fail start-up.
+        // Concurrent writers can also make Keycloak fail an update with a duplicate-key error (500).
         for (var attempt = 1; ; attempt++)
         {
             try
             {
+                await EnsureRealmSettingsAsync(realm, ct);
+
                 var client = await engine.CreateClientAsync(realm, portal, ct);
                 if (client.Outcome == ProvisioningOutcome.AlreadyExists)
                 {
@@ -42,7 +46,7 @@ public sealed class PlatformRealmInitializer(KeycloakAdminClient engine, IOption
 
                 return;
             }
-            catch (KeycloakAdminException ex) when (ex.StatusCode == HttpStatusCode.Conflict && attempt < MaxAttempts)
+            catch (KeycloakAdminException ex) when (ex.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.InternalServerError && attempt < MaxAttempts)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), ct);
             }
@@ -50,4 +54,26 @@ public sealed class PlatformRealmInitializer(KeycloakAdminClient engine, IOption
     }
 
     private const int MaxAttempts = 5;
+
+    /// <summary>
+    /// Settings added to the realm template after the platform realm may have been created: developers get the same
+    /// branded emails and security alerts as tenants' users. Written only when they differ.
+    /// </summary>
+    private async Task EnsureRealmSettingsAsync(RealmName realm, CancellationToken ct)
+    {
+        var current = await engine.GetRealmAsync(realm, ct);
+        var listeners = (current?["eventsListeners"] as JsonArray ?? []).Select(n => n!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        if (current?["emailTheme"]?.GetValue<string>() == "dovepeak" && listeners.SetEquals(EventListeners))
+        {
+            return;
+        }
+
+        await engine.UpdateRealmAsync(realm, new JsonObject
+        {
+            ["emailTheme"] = "dovepeak",
+            ["eventsListeners"] = new JsonArray([.. EventListeners.Select(l => JsonValue.Create(l))]),
+        }, ct);
+    }
+
+    private static readonly string[] EventListeners = ["jboss-logging", "email"];
 }

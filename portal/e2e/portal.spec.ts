@@ -15,7 +15,7 @@ const orgName = `Portal ${suffix}`;
 async function verificationLink(to: string): Promise<string> {
   for (let attempt = 0; attempt < 120; attempt++) {
     const search = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`).then((r) => r.json());
-    const message = search.messages?.find((m: { Subject: string }) => m.Subject.includes("Verify email"));
+    const message = search.messages?.find((m: { Subject: string }) => m.Subject.includes("Verify your email"));
     if (message) {
       const mail = await fetch(`${MAILPIT}/api/v1/message/${message.ID}`).then((r) => r.json());
       return mail.HTML.match(/href="([^"]*\/login-actions\/action-token[^"]*)"/)[1].replaceAll("&amp;", "&");

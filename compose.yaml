@@ -172,6 +172,10 @@ services:
       Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
       Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
       Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
+      # The workers provision realms (outbox), so they need the same SMTP settings as the Management API.
+      Keycloak__Smtp__Host: mailpit
+      Keycloak__Smtp__Port: "1025"
+      Keycloak__Smtp__StartTls: "false"
     depends_on:
       db-migrate:
         condition: service_completed_successfully

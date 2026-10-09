@@ -191,6 +191,35 @@ public sealed class KeycloakAdminClient(
     private static string Path(ClientScopeAssignment assignment) =>
         assignment == ClientScopeAssignment.Optional ? "optional-client-scopes" : "default-client-scopes";
 
+    private static readonly string[] SmtpKeys = ["host", "port", "from", "ssl", "starttls", "auth"];
+
+    /// <summary>
+    /// Makes the realm send email through the configured SMTP server. Returns false when nothing changed or no SMTP
+    /// server is configured. A realm without one cannot send verification, recovery or security alert emails.
+    /// </summary>
+    public async Task<bool> EnsureRealmSmtpAsync(RealmName realm, JsonObject representation, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(representation);
+        var smtp = options.Value.Smtp;
+        if (string.IsNullOrWhiteSpace(smtp.Host))
+        {
+            return false;
+        }
+
+        var desired = RealmTemplate.BuildSmtp(smtp);
+        var actual = representation["smtpServer"] as JsonObject;
+        var matches = actual is not null
+            && SmtpKeys.All(key =>
+                string.Equals(actual[key]?.ToString(), desired[key]?.ToString(), StringComparison.Ordinal));
+        if (matches)
+        {
+            return false;
+        }
+
+        await UpdateRealmAsync(realm, new JsonObject { ["smtpServer"] = desired }, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     // ---------------------------------------------------------------- Realm localization (tenant branding)
 
     /// <summary>The realm's localization overrides for a locale (texts that replace theme messages for this realm only).</summary>

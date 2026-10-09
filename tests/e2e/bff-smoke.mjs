@@ -79,7 +79,8 @@ const afterRegister = await follow(formAction(registrationHtml, "kc-register-for
 check("registration requires email verification", /verify your email/i.test(await afterRegister.response.text()));
 
 // 2. Email verification completes sign-in and returns to the app.
-const mail = await waitForEmail(email, "Verify email");
+// Matches both Keycloak's default subject and the Dovepeak email theme's ("Verify your email address").
+const mail = await waitForEmail(email, "Verify");
 const link = mail.HTML.match(/href="([^"]*\/login-actions\/action-token[^"]*)"/)[1].replaceAll("&amp;", "&");
 const landed = await follow(link);
 check("verification link returns to the app", landed.url.startsWith(APP), landed.url);

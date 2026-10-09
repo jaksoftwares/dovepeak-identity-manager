@@ -20,7 +20,7 @@ public sealed class RegistrationAndVerificationTests(TestRealm realm) : IClassFi
         Assert.Null(afterRegister.CallbackUri);
         Assert.Contains("verify your email", afterRegister.Page!.Text, StringComparison.OrdinalIgnoreCase);
 
-        var email = await Mailpit.WaitForMessageAsync(user.Email, "Verify email");
+        var email = await Mailpit.WaitForMessageAsync(user.Email, "Verify your email");
         var callback = (await browser.GetAsync(email.ActionLink())).RequireCallback();
         var tokens = await realm.WebApp.ExchangeCodeAsync(callback.RequireCode(request), request.CodeVerifier);
 
@@ -74,7 +74,7 @@ public sealed class RegistrationAndVerificationTests(TestRealm realm) : IClassFi
         });
 
         Assert.Null(result.CallbackUri);
-        var email = await Mailpit.WaitForMessageAsync(user.Email, "Verify email");
+        var email = await Mailpit.WaitForMessageAsync(user.Email, "Verify your email");
         Assert.NotNull((await browser.GetAsync(email.ActionLink())).CallbackUri);
     }
 

@@ -17,9 +17,9 @@ public sealed class TenantBrandingTests
     [Fact]
     public void Colours_AreNormalised_WithHoverShadeAndReadableText()
     {
-        var texts = new TenantBranding(PrimaryColor: "#1A73E8").ToLocalizationTexts();
+        var texts = new TenantBranding(PrimaryColor: "#0B5ED7").ToLocalizationTexts();
 
-        Assert.Equal("#1a73e8", texts["dovepeakBrandPrimaryColor"]);
+        Assert.Equal("#0b5ed7", texts["dovepeakBrandPrimaryColor"]);
         Assert.Matches("^#[0-9a-f]{6}$", texts["dovepeakBrandPrimaryColorDark"]!);
         Assert.Equal("#ffffff", texts["dovepeakBrandOnPrimaryColor"]);
     }

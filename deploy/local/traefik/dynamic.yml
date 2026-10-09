@@ -1,0 +1,96 @@
+# Dovepeak Identity edge configuration (milestone M2.4, threat model S-01, D-02, T-01).
+#
+# Public traffic reaches Keycloak only through this proxy. Credential and email-sending endpoints are
+# rate-limited per client IP, with counters shared in Valkey so limits hold across multiple edge instances.
+# Administrative surfaces (admin API/console, master realm) are never routed publicly.
+#
+# Limits are read from environment variables (see .env.example) so local, test and production deployments
+# can use different values without editing this file.
+
+http:
+  routers:
+    # Highest priority: never expose administrative surfaces on the public hostname.
+    blocked-admin:
+      rule: "PathPrefix(`/admin`) || PathPrefix(`/realms/master`) || PathPrefix(`/metrics`) || PathPrefix(`/health`)"
+      priority: 1000
+      entryPoints: [public]
+      middlewares: [deny-all]
+      service: noop@internal
+
+    # Endpoints that send email (recovery, registration, verification): strictest limit.
+    email-sending:
+      rule: "Method(`POST`) && PathRegexp(`^/realms/[a-z0-9-]+/login-actions/(reset-credentials|registration)`)"
+      priority: 900
+      entryPoints: [public]
+      middlewares: [security-headers, ratelimit-email]
+      service: keycloak
+
+    # Endpoints that verify credentials or issue tokens.
+    credentials:
+      rule: "Method(`POST`) && (PathRegexp(`^/realms/[a-z0-9-]+/login-actions/`) || PathRegexp(`^/realms/[a-z0-9-]+/protocol/openid-connect/(token|token/introspect|logout|revoke)$`))"
+      priority: 800
+      entryPoints: [public]
+      middlewares: [security-headers, ratelimit-credentials]
+      service: keycloak
+
+    # Everything else on the public hostname (discovery, JWKS, login pages, account console).
+    public:
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      entryPoints: [public]
+      middlewares: [security-headers, ratelimit-general]
+      service: keycloak
+
+  middlewares:
+    deny-all:
+      ipAllowList:
+        sourceRange: ["255.255.255.255/32"]
+
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        referrerPolicy: "no-referrer"
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+
+    ratelimit-email:
+      rateLimit:
+        average: {{ env "EDGE_RATELIMIT_EMAIL_PER_MINUTE" | default "5" }}
+        period: 1m
+        burst: {{ env "EDGE_RATELIMIT_EMAIL_BURST" | default "5" }}
+        redis:
+          endpoints: ["valkey:6379"]
+          password: {{ env "VALKEY_PASSWORD" | quote }}
+
+    ratelimit-credentials:
+      rateLimit:
+        average: {{ env "EDGE_RATELIMIT_CREDENTIALS_PER_MINUTE" | default "30" }}
+        period: 1m
+        burst: {{ env "EDGE_RATELIMIT_CREDENTIALS_BURST" | default "20" }}
+        redis:
+          endpoints: ["valkey:6379"]
+          password: {{ env "VALKEY_PASSWORD" | quote }}
+
+    ratelimit-general:
+      rateLimit:
+        average: {{ env "EDGE_RATELIMIT_GENERAL_PER_MINUTE" | default "600" }}
+        period: 1m
+        burst: {{ env "EDGE_RATELIMIT_GENERAL_BURST" | default "200" }}
+        redis:
+          endpoints: ["valkey:6379"]
+          password: {{ env "VALKEY_PASSWORD" | quote }}
+
+  services:
+    keycloak:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://keycloak:8080"
+        healthCheck:
+          path: /health/ready
+          port: 9000
+          interval: 10s
+          timeout: 3s

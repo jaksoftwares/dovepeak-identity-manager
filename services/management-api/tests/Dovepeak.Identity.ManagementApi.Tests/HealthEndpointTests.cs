@@ -56,6 +56,9 @@ public sealed class HealthEndpointTests : IClassFixture<HealthEndpointTests.Unre
             builder.UseSetting("ConnectionStrings:Postgres", "Host=127.0.0.1;Port=1;Database=x;Username=x;Password=not-a-secret;Timeout=2");
             builder.UseSetting("ConnectionStrings:Redis", "127.0.0.1:1,abortConnect=false,connectTimeout=1000");
             builder.UseSetting("Keycloak:HealthUrl", "http://127.0.0.1:1/health/ready");
+            builder.UseSetting("Keycloak:BaseUrl", "http://127.0.0.1:1");
+            builder.UseSetting("Keycloak:ClientId", "test-client");
+            builder.UseSetting("Keycloak:ClientSecret", "not-a-secret");
         }
     }
 }

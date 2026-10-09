@@ -1,0 +1,65 @@
+/*
+ * Dovepeak Identity login theme.
+ * Brand palette (branding/BRAND GUIDELINES): navy #000027, orange #FF6300, ghost white #F8F8FF.
+ * Tenant-specific names are rendered in the header from the realm display name, set by provisioning.
+ */
+
+:root {
+  --dp-navy: #000027;
+  --dp-orange: #ff6300;
+  --dp-orange-dark: #d95400;
+  --dp-ghost: #f8f8ff;
+
+  --keycloak-card-top-color: var(--dp-orange);
+
+  --pf-v5-global--primary-color--100: var(--dp-orange);
+  --pf-v5-global--primary-color--200: var(--dp-orange-dark);
+  --pf-v5-global--link--Color: #b84300;
+  --pf-v5-global--link--Color--hover: var(--dp-navy);
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--dp-orange);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--dp-orange-dark);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--dp-orange-dark);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--dp-orange-dark);
+  --pf-v5-c-form-control--focus--after--BorderBottomColor: var(--dp-orange);
+}
+
+.login-pf body {
+  background: radial-gradient(circle at 20% 10%, #1a1a4d 0%, var(--dp-navy) 60%) fixed;
+}
+
+/* Tenant name (realm display name) above the card. */
+#kc-header-wrapper {
+  color: var(--dp-ghost);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.pf-v5-c-login__main {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 39, 0.45);
+}
+
+.pf-v5-c-login__main-header {
+  border-top-width: 5px;
+}
+
+/* "Secured by Dovepeak Identity" attribution under every card. */
+.pf-v5-c-login__main::after {
+  content: "Secured by Dovepeak Identity";
+  display: block;
+  padding: 12px 0 18px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #5b5b78;
+  background: url("../img/dovepeak-mark.svg") no-repeat calc(50% - 98px) 11px / 14px 15px;
+}
+
+/* Keep keyboard focus clearly visible (WCAG 2.4.7). */
+.pf-v5-c-button:focus-visible,
+.pf-v5-c-form-control:focus-within {
+  outline: 3px solid var(--dp-orange);
+  outline-offset: 2px;
+}

@@ -55,3 +55,17 @@ Create one GitHub milestone per entry in [implementation-plan.md](../implementat
 ## 7. Verification (M0.2 "done when")
 
 After setup, open a test pull request that adds a file containing a realistic-looking fake secret (for example an AWS-style key pattern). Confirm that the **Secret scanning** check fails and merging is blocked. Close the pull request without merging.
+
+
+
+remaining git setup:
+Phase 0 items you need to finish on GitHub (I left them unticked in implementation-plan.md):
+
+Apply branch protection, the security settings and the code-owner teams by following docs/github-repository-setup.md.
+Create the GitHub milestones.
+Push, then open a test PR containing a fake secret and confirm the Secret scanning check blocks it. That's the "done when" check for M0.2. The CI workflows haven't run on GitHub yet, so that PR will also be their first real test.
+Replace the placeholder contact emails in SECURITY.md and CODE_OF_CONDUCT.md.
+After that, Phase 1 begins with M1.1: creating Keycloak realms from .NET code, which is also where we answer open question E-01 in the threat model.
+
+
+

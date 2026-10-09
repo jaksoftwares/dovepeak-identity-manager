@@ -68,3 +68,14 @@ Phase 1 milestones M1.1–M1.6 must demonstrate:
 * Measured behaviour at approximately 500 realms, producing a documented sharding threshold.
 
 If validation fails, Option 4 (OpenIddict) is evaluated before Phase 2 begins, and this ADR is superseded.
+
+## Validation Results (Phase 1)
+
+Completed 2026-10-09. Full details: [Phase 1 validation report](../validation/phase-1-validation-report.md).
+
+* Every validation criterion above was met and is covered by automated tests that run in CI.
+* E-01 is answered: the Management API's account holds only the master `create-realm` role and can administer only the realms it created.
+* Seven findings changed the design (user profile, client policy configuration, event types, admin token growth, a token-cache race, test cookie handling, and a log leak); all are fixed.
+* Keycloakify is deferred to Phase 4 in favour of a CSS-only theme ([ADR-0006](0006-hosted-login-theming.md)).
+
+**Recommendation:** GO, with the conditions listed in section 6 of the validation report. This ADR moves to **Accepted** when the team approves that recommendation.

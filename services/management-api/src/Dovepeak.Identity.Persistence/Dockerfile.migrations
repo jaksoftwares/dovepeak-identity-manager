@@ -1,0 +1,25 @@
+# Builds a self-contained EF Core migration bundle that applies pending migrations and exits.
+# Build context: repository root.
+# Usage: docker run --rm <image> --connection "Host=...;Database=dovepeak;..."
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+WORKDIR /src
+
+COPY dotnet-tools.json Directory.Build.props Directory.Packages.props .editorconfig ./
+RUN dotnet tool restore
+
+COPY services/management-api/src/Dovepeak.Identity.Persistence/Dovepeak.Identity.Persistence.csproj services/management-api/src/Dovepeak.Identity.Persistence/
+RUN dotnet restore services/management-api/src/Dovepeak.Identity.Persistence --runtime linux-musl-x64
+
+COPY services/management-api/src/Dovepeak.Identity.Persistence/ services/management-api/src/Dovepeak.Identity.Persistence/
+RUN dotnet ef migrations bundle \
+    --project services/management-api/src/Dovepeak.Identity.Persistence \
+    --self-contained --target-runtime linux-musl-x64 \
+    --output /out/efbundle
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine AS runtime
+WORKDIR /app
+COPY --from=build /out/efbundle .
+
+USER $APP_UID
+ENTRYPOINT ["./efbundle"]

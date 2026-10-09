@@ -51,12 +51,18 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
+      # Public hostname (through the edge proxy) and a separate local-only admin hostname.
       KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8080}
+      KC_HOSTNAME_ADMIN: http://localhost:${KEYCLOAK_ADMIN_HOST_PORT:-8081}
+      KC_PROXY_HEADERS: xforwarded
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?Copy .env.example to .env}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Copy .env.example to .env}
     ports:
-      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8080}:8080"
+      # Direct access for the admin console and local tooling only. Public traffic goes through "edge".
+      - "127.0.0.1:${KEYCLOAK_ADMIN_HOST_PORT:-8081}:8080"
       - "127.0.0.1:${KEYCLOAK_MANAGEMENT_HOST_PORT:-9000}:9000"
+    volumes:
+      - ./identity/keycloak/themes/dovepeak:/opt/keycloak/themes/dovepeak:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +78,95 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+
+  keycloak-bootstrap:
+    # One-shot job: creates the Management API's least-privilege service account.
+    image: quay.io/keycloak/keycloak:26.4.0
+    entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
+    restart: "no"
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      MANAGEMENT_CLIENT_ID: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
+      MANAGEMENT_CLIENT_SECRET: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET:?Copy .env.example to .env}
+    volumes:
+      - ./identity/keycloak/bootstrap:/bootstrap:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  edge:
+    # Public entry point: rate limiting and blocking of administrative paths (deploy/local/traefik/dynamic.yml).
+    image: traefik:v3.5.3
+    restart: unless-stopped
+    command:
+      - --entrypoints.public.address=:80
+      - --entrypoints.ping.address=:8082
+      - --ping.entrypoint=ping
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --providers.file.watch=true
+      - --api.dashboard=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.format=json
+      - --accesslog.fields.headers.defaultmode=drop
+      # RequestPath includes the query string, which carries single-use action tokens (email verification and
+      # password reset links). Traefik cannot redact query strings, so the path is dropped; the matched router
+      # name, method, status and duration are kept.
+      - --accesslog.fields.names.RequestPath=drop
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+      EDGE_RATELIMIT_EMAIL_PER_MINUTE: ${EDGE_RATELIMIT_EMAIL_PER_MINUTE:-5}
+      EDGE_RATELIMIT_EMAIL_BURST: ${EDGE_RATELIMIT_EMAIL_BURST:-5}
+      EDGE_RATELIMIT_CREDENTIALS_PER_MINUTE: ${EDGE_RATELIMIT_CREDENTIALS_PER_MINUTE:-30}
+      EDGE_RATELIMIT_CREDENTIALS_BURST: ${EDGE_RATELIMIT_CREDENTIALS_BURST:-20}
+      EDGE_RATELIMIT_GENERAL_PER_MINUTE: ${EDGE_RATELIMIT_GENERAL_PER_MINUTE:-600}
+      EDGE_RATELIMIT_GENERAL_BURST: ${EDGE_RATELIMIT_GENERAL_BURST:-200}
+    ports:
+      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8080}:80"
+    volumes:
+      - ./deploy/local/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--entrypoints.ping.address=:8082", "--ping.entrypoint=ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  db-migrate:
+    # One-shot job: applies Dovepeak database migrations (EF Core bundle), then exits.
+    build:
+      context: .
+      dockerfile: services/management-api/src/Dovepeak.Identity.Persistence/Dockerfile.migrations
+    restart: "no"
+    command: ["--connection", "Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD}"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  workers:
+    build:
+      context: .
+      dockerfile: services/workers/Dockerfile
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD}
+      Keycloak__BaseUrl: http://keycloak:8080
+      Keycloak__ClientId: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
+      Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      keycloak-bootstrap:
+        condition: service_completed_successfully
 
   mailpit:
     image: axllent/mailpit:v1.27
@@ -90,6 +185,12 @@ services:
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD}
       ConnectionStrings__Redis: valkey:6379,password=${VALKEY_PASSWORD},abortConnect=false
       Keycloak__HealthUrl: http://keycloak:9000/health/ready
+      Keycloak__BaseUrl: http://keycloak:8080
+      Keycloak__ClientId: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
+      Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
+      Keycloak__Smtp__Host: mailpit
+      Keycloak__Smtp__Port: "1025"
+      Keycloak__Smtp__StartTls: "false"
     ports:
       - "127.0.0.1:${MANAGEMENT_API_HOST_PORT:-5080}:8080"
     depends_on:
@@ -97,8 +198,10 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-      keycloak:
-        condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
       interval: 10s

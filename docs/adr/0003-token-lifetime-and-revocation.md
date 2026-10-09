@@ -39,6 +39,28 @@ The problem statement (sections 4.3, 4.4 and 17) requires short-lived access tok
 * High-sensitivity APIs pay the latency cost of introspection to gain immediate revocation.
 * Default lifetimes are conservative and may be tuned after Phase 1 measurements.
 
+## Measured Behaviour (Phase 1, Keycloak 26.4.0)
+
+Verified by `RefreshTokenRotationTests`, `SessionLifetimeTests`, `PasswordRecoveryTests` and `SigningKeyRotationTests`:
+
+| Scenario | Observed result |
+| -------- | --------------- |
+| Refresh | New refresh token issued; previous one invalid. |
+| Reuse of a rotated refresh token | Rejected (`invalid_grant`). The **client session is revoked**: the legitimate holder's newest refresh token is rejected too. |
+| Other clients of the same user | Unaffected by reuse in a different client. The user's SSO browser session also survives, so the user can sign in again without re-entering credentials if their browser session is still valid. |
+| Back-channel logout | Refresh token rejected immediately. |
+| Admin "log out user" | All sessions for the user, across clients, revoked. |
+| Single session revocation | Only that session's tokens rejected; others remain active. |
+| Absolute session lifetime | Refresh fails once the lifetime is reached, even for active sessions. |
+| Password reset with "sign out other devices" | All previous sessions revoked. |
+| Emergency key rotation | All refresh tokens rejected; access tokens rejected by any resource server that refreshes its JWKS. |
+
+**Refinement of the decision:** "revokes the entire token family and its session" is implemented by Keycloak as revocation of the *client session*. This matches the threat (a stolen refresh token belongs to one client) and is accepted.
+
+**Known limitation:** Keycloak applies a two-minute grace window to *idle* session timeouts. Idle expiry therefore happens up to two minutes later than configured. Absolute lifetimes are exact.
+
+**Resource server guidance:** a resource server that caches JWKS keeps accepting tokens signed by a deleted key until its cache refreshes. SDKs must bound the JWKS cache lifetime (target: 10 minutes) so that emergency rotation takes effect within one access token lifetime.
+
 ## Validation
 
 * M1.4: rotation and reuse detection demonstrated.

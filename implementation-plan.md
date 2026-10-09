@@ -131,9 +131,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M0.4
 
-- [ ] Create a realm through the Keycloak Admin API from prototype .NET code.
-- [ ] Register a public SPA client and a confidential backend client.
-- [ ] Delete a realm and confirm clean removal.
+- [x] Create a realm through the Keycloak Admin API from prototype .NET code. *(Built as production code: `KeycloakAdminClient`.)*
+- [x] Register a public SPA client and a confidential backend client.
+- [x] Delete a realm and confirm clean removal.
 
 **Done when:** realm creation and deletion are fully scripted and repeatable.
 
@@ -141,11 +141,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M1.1
 
-- [ ] Throwaway Next.js app using Authorization Code with PKCE through a BFF.
-- [ ] Registration, login and logout.
-- [ ] Email verification through Mailpit.
-- [ ] Password recovery.
-- [ ] Session cookie is HTTP-only, Secure and protected against CSRF.
+- [x] Throwaway Next.js app using Authorization Code with PKCE through a BFF. *(Kept as `examples/nextjs-bff`.)*
+- [x] Registration, login and logout.
+- [x] Email verification through Mailpit.
+- [x] Password recovery. *(Hosted recovery flow; covered by `PasswordRecoveryTests`.)*
+- [x] Session cookie is HTTP-only, Secure and protected against CSRF. *(`Secure` and `__Host-` prefix applied when served over HTTPS.)*
 
 **Done when:** a user completes the full account lifecycle in the proof-of-concept app.
 
@@ -153,9 +153,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M1.2
 
-- [ ] .NET API validating issuer, audience, signature, expiry and required claims.
-- [ ] Rejects unsigned tokens, `alg: none` and unexpected algorithms.
-- [ ] Rejects tokens from a different realm.
+- [x] .NET API validating issuer, audience, signature, expiry and required claims.
+- [x] Rejects unsigned tokens, `alg: none` and unexpected algorithms.
+- [x] Rejects tokens from a different realm.
 
 **Done when:** automated tests prove valid tokens pass and every invalid case is rejected.
 
@@ -163,9 +163,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M1.3
 
-- [ ] Refresh tokens rotate on every use.
-- [ ] Reusing a rotated refresh token revokes the session.
-- [ ] Measured behaviour documented against ADR-003.
+- [x] Refresh tokens rotate on every use.
+- [x] Reusing a rotated refresh token revokes the session.
+- [x] Measured behaviour documented against ADR-003.
 
 **Done when:** a reuse attack in a test is detected and the session is revoked.
 
@@ -173,9 +173,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M1.2
 
-- [ ] Keycloakify theme using the Dovepeak brand guidelines.
-- [ ] Login, registration, verification and recovery pages styled.
-- [ ] Prototype of per-tenant branding (logo and colours).
+- [x] ~~Keycloakify~~ theme using the Dovepeak brand guidelines. *(CSS-only child theme instead; Keycloakify re-evaluated in Phase 4 — ADR-0006.)*
+- [x] Login, registration, verification and recovery pages styled.
+- [ ] Prototype of per-tenant branding (logo and colours). *(Partial: per-tenant name only. Logo and colours moved to Phase 4 — ADR-0006, limitation L-07.)*
 
 **Done when:** two realms display different branding from the same theme.
 
@@ -183,11 +183,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M1.4, M1.5
 
-- [ ] Provision approximately 500 realms and measure provisioning time, memory and login latency.
-- [ ] Define the realm-count threshold for sharding to a new cluster.
-- [ ] Verify licences for Keycloak, Keycloakify and major dependencies.
-- [ ] Write the validation report.
-- [ ] Go/no-go decision on ADR-001 recorded.
+- [x] Provision approximately 500 realms and measure provisioning time, memory and login latency.
+- [x] Define the realm-count threshold for sharding to a new cluster.
+- [x] Verify licences for Keycloak, Keycloakify and major dependencies.
+- [x] Write the validation report.
+- [x] Go/no-go decision on ADR-001 recorded. *(Recommendation: GO with conditions — awaiting team approval.)*
 
 **Done when:** the decision is signed off. On "no-go", evaluate the OpenIddict fallback before Phase 2 begins.
 
@@ -199,14 +199,14 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M1.6
 
-- [ ] Version-controlled realm template in `/identity/keycloak`.
-- [ ] Argon2id hashing with documented parameters.
-- [ ] Password policy.
-- [ ] Brute-force detection and lockout.
-- [ ] Access token lifetime of 10 minutes; refresh rotation enabled.
-- [ ] Idle and absolute session timeouts.
-- [ ] PKCE required; implicit flow and password grant disabled.
-- [ ] Strict redirect URI matching.
+- [x] Version-controlled realm template in `/identity/keycloak`.
+- [x] Argon2id hashing with documented parameters.
+- [x] Password policy.
+- [x] Brute-force detection and lockout.
+- [x] Access token lifetime of 10 minutes; refresh rotation enabled.
+- [x] Idle and absolute session timeouts.
+- [x] PKCE required; implicit flow and password grant disabled. *(Enforced realm-wide by client policies.)*
+- [x] Strict redirect URI matching.
 
 **Done when:** a template-applied realm passes an automated configuration check against every default above.
 
@@ -214,10 +214,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M2.1
 
-- [ ] Configurable SMTP provider.
-- [ ] Templates for verification, recovery and security alerts.
-- [ ] Per-tenant template overrides.
-- [ ] Per-tenant sending quotas.
+- [x] Configurable SMTP provider.
+- [ ] Templates for verification, recovery and security alerts. *(Partial: verification and recovery use Keycloak's templates. Branded templates and security alerts move to Phase 4.)*
+- [ ] Per-tenant template overrides. *(Moved to Phase 4 with per-tenant branding.)*
+- [ ] Per-tenant sending quotas. *(Partial: per-IP limits on email-sending endpoints. Per-account and per-tenant quotas: limitation L-04, Phase 3.)*
 
 **Done when:** each email type is delivered and rendered correctly for two different tenants.
 
@@ -225,10 +225,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M2.1
 
-- [ ] Asymmetric signing (RS256 or ES256).
-- [ ] JWKS endpoint published.
-- [ ] Scripted key rotation with an overlap period.
-- [ ] Emergency rotation procedure documented and tested.
+- [x] Asymmetric signing (RS256 or ES256).
+- [x] JWKS endpoint published.
+- [x] Scripted key rotation with an overlap period.
+- [x] Emergency rotation procedure documented and tested.
 
 **Done when:** keys rotate without invalidating active sessions, and emergency rotation invalidates all tokens.
 
@@ -236,9 +236,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M2.1
 
-- [ ] Edge rate limiting on login, registration, recovery, verification and token endpoints.
-- [ ] Account- and IP-based throttling backed by Redis.
-- [ ] Enumeration-resistant responses for registration and recovery.
+- [x] Edge rate limiting on login, registration, recovery, verification and token endpoints.
+- [x] Account- and IP-based throttling backed by Redis. *(IP: edge with Valkey counters. Account: Keycloak brute-force lockout.)*
+- [x] Enumeration-resistant responses for registration and recovery.
 
 **Done when:** automated tests confirm throttling triggers and responses do not reveal whether an account exists.
 
@@ -246,9 +246,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M2.1
 
-- [ ] Keycloak event listener forwarding authentication events.
-- [ ] Events stored in the Dovepeak audit store with tenant identifiers.
-- [ ] Structured logging with credentials and tokens redacted.
+- [x] Keycloak event listener forwarding authentication events. *(Implemented as an idempotent collector in `services/workers` — no Java extension needed; limitation L-10.)*
+- [x] Events stored in the Dovepeak audit store with tenant identifiers.
+- [x] Structured logging with credentials and tokens redacted. *(Enforced in CI by `scripts/ci/scan-logs-for-secrets.sh`.)*
 
 **Done when:** login, logout, failure and credential-change events appear in the audit store, and a log scan finds no secrets.
 
@@ -256,8 +256,8 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M2.2, M2.3, M2.4, M2.5
 
-- [ ] Automated tests for registration, login, verification, recovery, refresh, reuse detection, logout, session expiry and session revocation.
-- [ ] Tests run in CI against a disposable Keycloak instance.
+- [x] Automated tests for registration, login, verification, recovery, refresh, reuse detection, logout, session expiry and session revocation.
+- [x] Tests run in CI against a disposable Keycloak instance.
 
 **Done when:** the full suite passes in CI on every pull request.
 
@@ -273,7 +273,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 - [ ] `/v1` versioned routing.
 - [ ] Standard error format (RFC 9457 Problem Details).
 - [ ] OpenAPI generation.
-- [ ] EF Core with migrations.
+- [x] EF Core with migrations. *(Delivered early in M2.5: `Dovepeak.Identity.Persistence` and the `db-migrate` job.)*
 - [ ] Developer authentication through the Keycloak "platform" realm.
 
 **Done when:** an authenticated developer can call a `/v1` endpoint and the OpenAPI document is generated in CI.

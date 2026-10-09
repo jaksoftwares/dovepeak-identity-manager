@@ -13,8 +13,10 @@ This directory records significant architectural decisions for Dovepeak Identity
 
 | ADR                                                    | Title                                     | Status                                   |
 | ------------------------------------------------------ | ----------------------------------------- | ---------------------------------------- |
-| [0001](0001-identity-engine-selection.md)              | Identity engine selection                 | Proposed (pending Phase 1 validation)    |
+| [0001](0001-identity-engine-selection.md)              | Identity engine selection                 | Proposed — Phase 1 recommends GO        |
 | [0002](0002-identity-ownership-and-sharing.md)         | Identity ownership and sharing model      | Proposed                                 |
 | [0003](0003-token-lifetime-and-revocation.md)          | Token lifetime and revocation semantics   | Proposed                                 |
 | [0004](0004-credential-types.md)                       | Credential types and handling             | Proposed                                 |
 | [0005](0005-cache-engine-valkey.md)                    | Cache and transient state engine          | Proposed                                 |
+| [0006](0006-hosted-login-theming.md)                   | Hosted login theming approach             | Proposed                                 |
+| [0007](0007-edge-proxy-and-admin-separation.md)        | Edge proxy, rate limiting, admin separation | Proposed                               |

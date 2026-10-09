@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Single source of truth for the realm baseline lives in /identity/keycloak. -->
+    <EmbeddedResource Include="..\..\..\..\identity\keycloak\realm-template\realm-template.json"
+                      LogicalName="Dovepeak.Identity.Keycloak.realm-template.json" />
+    <EmbeddedResource Include="..\..\..\..\identity\keycloak\realm-template\user-profile.json"
+                      LogicalName="Dovepeak.Identity.Keycloak.user-profile.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dovepeak.Identity.ManagementApi.Tests" />
+  </ItemGroup>
+
+</Project>

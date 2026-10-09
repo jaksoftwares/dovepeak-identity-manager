@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\services\management-api\src\Dovepeak.Identity.Keycloak\Dovepeak.Identity.Keycloak.csproj" />
+    <ProjectReference Include="..\..\examples\dotnet-protected-api\Dovepeak.Examples.ProtectedApi\Dovepeak.Examples.ProtectedApi.csproj" Aliases="ProtectedApi" />
+    <ProjectReference Include="..\..\services\workers\Dovepeak.Identity.Workers\Dovepeak.Identity.Workers.csproj" />
+  </ItemGroup>
+
+</Project>

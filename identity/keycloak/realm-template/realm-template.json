@@ -1,0 +1,110 @@
+{
+  "enabled": true,
+  "sslRequired": "external",
+
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "rememberMe": false,
+
+  "passwordPolicy": "length(12) and maxLength(128) and notUsername and notEmail and passwordHistory(5) and hashAlgorithm(argon2)",
+
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 600,
+  "accessTokenLifespanForImplicitFlow": 600,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanLogin": 1800,
+  "accessCodeLifespanUserAction": 300,
+  "actionTokenGeneratedByUserLifespan": 900,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 43200,
+  "clientSessionIdleTimeout": 0,
+  "clientSessionMaxLifespan": 0,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": true,
+  "offlineSessionMaxLifespan": 5184000,
+
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "enabledEventTypes": [
+    "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
+    "REGISTER", "REGISTER_ERROR",
+    "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+    "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR",
+    "CLIENT_LOGIN", "CLIENT_LOGIN_ERROR",
+    "INTROSPECT_TOKEN_ERROR", "REVOKE_GRANT",
+    "SEND_VERIFY_EMAIL", "SEND_VERIFY_EMAIL_ERROR", "VERIFY_EMAIL", "VERIFY_EMAIL_ERROR",
+    "SEND_RESET_PASSWORD", "SEND_RESET_PASSWORD_ERROR", "RESET_PASSWORD", "RESET_PASSWORD_ERROR",
+    "UPDATE_PASSWORD", "UPDATE_PASSWORD_ERROR", "UPDATE_CREDENTIAL", "UPDATE_CREDENTIAL_ERROR",
+    "REMOVE_CREDENTIAL", "REMOVE_CREDENTIAL_ERROR",
+    "UPDATE_EMAIL", "UPDATE_EMAIL_ERROR", "UPDATE_PROFILE", "UPDATE_PROFILE_ERROR",
+    "UPDATE_TOTP", "REMOVE_TOTP",
+    "USER_DISABLED_BY_TEMPORARY_LOCKOUT", "USER_DISABLED_BY_PERMANENT_LOCKOUT",
+    "DELETE_ACCOUNT", "DELETE_ACCOUNT_ERROR"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+
+  "internationalizationEnabled": false,
+  "loginTheme": "dovepeak",
+
+  "browserSecurityHeaders": {
+    "contentSecurityPolicyReportOnly": "",
+    "xContentTypeOptions": "nosniff",
+    "referrerPolicy": "no-referrer",
+    "xRobotsTag": "none",
+    "xFrameOptions": "DENY",
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'none'; object-src 'none';",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  },
+
+  "attributes": {
+    "dovepeak.templateVersion": "1",
+    "frontendUrl": ""
+  },
+
+  "clientProfiles": {
+    "profiles": [
+      {
+        "name": "dovepeak-secure-defaults",
+        "description": "Dovepeak Identity platform baseline: PKCE S256 required, implicit and password grants rejected.",
+        "executors": [
+          { "executor": "pkce-enforcer", "configuration": { "auto-configure": "true" } },
+          { "executor": "reject-implicit-grant", "configuration": { "auto-configure": "true" } },
+          { "executor": "reject-ropc-grant", "configuration": { "auto-configure": "true" } }
+        ]
+      }
+    ]
+  },
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "dovepeak-secure-defaults",
+        "description": "Applies the platform baseline to every client in the realm.",
+        "enabled": true,
+        "conditions": [
+          { "condition": "any-client", "configuration": {} }
+        ],
+        "profiles": ["dovepeak-secure-defaults"]
+      }
+    ]
+  }
+}

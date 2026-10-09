@@ -1,10 +1,25 @@
 <Solution>
+  <Folder Name="/examples/" />
+  <Folder Name="/examples/dotnet-protected-api/">
+    <Project Path="examples/dotnet-protected-api/Dovepeak.Examples.ProtectedApi/Dovepeak.Examples.ProtectedApi.csproj" />
+  </Folder>
   <Folder Name="/services/" />
   <Folder Name="/services/management-api/" />
   <Folder Name="/services/management-api/src/">
+    <Project Path="services/management-api/src/Dovepeak.Identity.Keycloak/Dovepeak.Identity.Keycloak.csproj" />
     <Project Path="services/management-api/src/Dovepeak.Identity.ManagementApi/Dovepeak.Identity.ManagementApi.csproj" />
+    <Project Path="services/management-api/src/Dovepeak.Identity.Persistence/Dovepeak.Identity.Persistence.csproj" />
   </Folder>
   <Folder Name="/services/management-api/tests/">
     <Project Path="services/management-api/tests/Dovepeak.Identity.ManagementApi.Tests/Dovepeak.Identity.ManagementApi.Tests.csproj" />
+  </Folder>
+  <Folder Name="/services/workers/">
+    <Project Path="services/workers/Dovepeak.Identity.Workers/Dovepeak.Identity.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Dovepeak.Identity.IntegrationTests/Dovepeak.Identity.IntegrationTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Dovepeak.Identity.DevTool/Dovepeak.Identity.DevTool.csproj" />
   </Folder>
 </Solution>

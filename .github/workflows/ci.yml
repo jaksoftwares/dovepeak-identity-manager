@@ -33,9 +33,10 @@ jobs:
       - name: Build
         run: dotnet build Dovepeak.Identity.slnx --configuration Release --no-restore
 
-      - name: Test
+      - name: Unit tests
         run: >-
           dotnet test Dovepeak.Identity.slnx --configuration Release --no-build
+          --filter "Category!=Integration"
           --logger trx --results-directory TestResults
           --collect "XPlat Code Coverage"
 
@@ -46,6 +47,79 @@ jobs:
           name: dotnet-test-results
           path: TestResults
           retention-days: 14
+
+  integration:
+    name: Integration and end-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: examples/nextjs-bff/package-lock.json
+
+      - name: Start the stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait --wait-timeout 900
+
+      - name: Build
+        run: dotnet build Dovepeak.Identity.slnx --configuration Release
+
+      - name: Integration tests
+        run: >-
+          dotnet test tests/Dovepeak.Identity.IntegrationTests --configuration Release --no-build
+          --logger trx --results-directory TestResults
+
+      - name: BFF end-to-end test
+        run: |
+          dotnet run --project tools/Dovepeak.Identity.DevTool --configuration Release --no-build -- demo-setup
+          nohup dotnet run --project examples/dotnet-protected-api/Dovepeak.Examples.ProtectedApi \
+            --configuration Release --no-build -- \
+            --Auth:Issuer=http://localhost:8080/realms/dp-demo --Auth:Audience=dovepeak-demo-api \
+            --Auth:RequireHttpsMetadata=false > protected-api.log 2>&1 &
+          cd examples/nextjs-bff
+          npm ci
+          npm run typecheck
+          npm run build
+          nohup npm start > ../../bff.log 2>&1 &
+          cd ../..
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3000/ > /dev/null && curl -sf http://localhost:5301/public > /dev/null && break
+            sleep 2
+          done
+          node tests/e2e/bff-smoke.mjs
+
+      - name: Scan logs for leaked secrets
+        if: always()
+        run: scripts/ci/scan-logs-for-secrets.sh .env
+
+      - name: Collect logs
+        if: failure()
+        run: docker compose logs --no-color > stack.log
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results
+          path: |
+            TestResults
+            stack.log
+            protected-api.log
+            bff.log
+          retention-days: 14
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
 
   compose:
     name: Local stack configuration

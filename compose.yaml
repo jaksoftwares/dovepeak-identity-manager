@@ -6,7 +6,7 @@ name: dovepeak-identity
 
 services:
   postgres:
-    image: postgres:17.6-alpine
+    image: postgres:18.6-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres

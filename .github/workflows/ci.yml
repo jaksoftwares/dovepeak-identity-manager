@@ -170,7 +170,7 @@ jobs:
         run: docker build -f services/management-api/Dockerfile -t dovepeak/management-api:ci .
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: dovepeak/management-api:ci
           severity: CRITICAL,HIGH
@@ -181,7 +181,7 @@ jobs:
         run: docker build -t dovepeak/portal:ci portal
 
       - name: Scan portal image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: dovepeak/portal:ci
           severity: CRITICAL,HIGH

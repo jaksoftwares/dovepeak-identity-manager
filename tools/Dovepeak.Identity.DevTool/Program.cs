@@ -12,9 +12,11 @@ var configuration = new ConfigurationBuilder()
         ["Keycloak:BaseUrl"] = "http://localhost:8081/",
         ["Keycloak:ClientId"] = "dovepeak-management",
         ["Keycloak:ClientSecret"] = "management_client_local_only",
-        ["Keycloak:Smtp:Host"] = "mailpit",
-        ["Keycloak:Smtp:Port"] = "1025",
+        ["Keycloak:Smtp:Host"] = "mail-relay",
+        ["Keycloak:Smtp:Port"] = "2525",
         ["Keycloak:Smtp:StartTls"] = "false",
+        ["Keycloak:Smtp:RealmAsUsername"] = "true",
+        ["Keycloak:Smtp:Password"] = "mail_relay_local_only",
         ["PublicUrl"] = "http://localhost:8080/",
     })
     .AddEnvironmentVariables(prefix: "DOVEPEAK_")
@@ -37,6 +39,7 @@ try
         "rotate-keys" => await KeyCommands.RotateAsync(provider, commandArgs),
         "retire-keys" => await KeyCommands.RetireAsync(provider, commandArgs),
         "emergency-rotate-keys" => await KeyCommands.EmergencyRotateAsync(provider, commandArgs),
+        "drill-drift" => await DriftDrill.RunAsync(provider, commandArgs),
         _ => Usage(),
     };
 }
@@ -66,6 +69,10 @@ static int Usage()
           emergency-rotate-keys   Replace all keys and revoke every session (key compromise)
               --realm <name>
               --confirm           Required
+          drill-drift             Incident drill: tamper with a client in Keycloak, expect revert and alert (M6.1)
+              --realm <name> --client <clientId>
+              --prometheus <url>  (default http://localhost:9090/)
+              --timeout-minutes <n>  (default 10)
 
         Environment overrides use the DOVEPEAK_ prefix, e.g. DOVEPEAK_Keycloak__BaseUrl, DOVEPEAK_PublicUrl.
         """);

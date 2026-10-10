@@ -32,6 +32,8 @@ public static class KeycloakAdmin
                 ["Keycloak:Smtp:Host"] = settings.SmtpHost,
                 ["Keycloak:Smtp:Port"] = settings.SmtpPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 ["Keycloak:Smtp:StartTls"] = "false",
+                ["Keycloak:Smtp:RealmAsUsername"] = "true",
+                ["Keycloak:Smtp:Password"] = settings.SmtpPassword,
             })
             .Build();
 

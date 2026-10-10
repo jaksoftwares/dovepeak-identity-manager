@@ -51,9 +51,17 @@ services:
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
+      # Observability (M6.1): latency histograms and per-realm login/registration event counters for SLOs and alerts.
+      KC_HTTP_METRICS_HISTOGRAMS_ENABLED: "true"
+      KC_EVENT_METRICS_USER_ENABLED: "true"
+      KC_EVENT_METRICS_USER_TAGS: realm
+      # Traces go to the OpenTelemetry Collector when the observability profile runs (see .env.example).
+      KC_TRACING_ENABLED: ${KC_TRACING_ENABLED:-false}
+      KC_TRACING_ENDPOINT: http://otel-collector:4317
+      KC_TRACING_SERVICE_NAME: keycloak
       # Overlapping client secret rotation (realm template profile "dovepeak-secret-rotation"). A Keycloak preview
       # feature: without it, realm provisioning rejects the template. See ADR-0004 and known limitation L-13.
-      KC_FEATURES: client-secret-rotation
+      KC_FEATURES: client-secret-rotation,user-event-metrics
       # Security alert emails (realm template "email" event listener): credential changes and lockouts.
       # LOGIN_ERROR is excluded so an attacker cannot flood a user's inbox by guessing passwords. Keycloak 26 reports
       # a password or OTP change both as a legacy event and as UPDATE/REMOVE_CREDENTIAL; the legacy ones are excluded
@@ -125,6 +133,10 @@ services:
       # password reset links). Traefik cannot redact query strings, so the path is dropped; the matched router
       # name, method, status and duration are kept.
       - --accesslog.fields.names.RequestPath=drop
+      - --entrypoints.metrics.address=:8083
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entryPoint=metrics
+      - --metrics.prometheus.addRoutersLabels=true
       - --global.checknewversion=false
       - --global.sendanonymoususage=false
     environment:
@@ -168,21 +180,59 @@ services:
     restart: unless-stopped
     environment:
       DOTNET_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD};Maximum Pool Size=30;Timeout=15;Command Timeout=30
       Keycloak__BaseUrl: http://keycloak:8080
       Keycloak__ClientId: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
       Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
       Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
       Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
+      Keycloak__HealthUrl: http://keycloak:9000/health/ready
       # The workers provision realms (outbox), so they need the same SMTP settings as the Management API.
-      Keycloak__Smtp__Host: mailpit
-      Keycloak__Smtp__Port: "1025"
+      Keycloak__Smtp__Host: mail-relay
+      Keycloak__Smtp__Port: "2525"
       Keycloak__Smtp__StartTls: "false"
+      Keycloak__Smtp__RealmAsUsername: "true"
+      Keycloak__Smtp__Password: ${MAIL_RELAY_PASSWORD:?Copy .env.example to .env}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    stop_grace_period: 30s
     depends_on:
       db-migrate:
         condition: service_completed_successfully
       keycloak-bootstrap:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mail-relay:
+    # Every realm sends email through the relay: per-recipient and per-tenant quotas (L-04) and delivery metrics.
+    build:
+      context: .
+      dockerfile: services/mail-relay/Dockerfile
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__Redis: valkey:6379,password=${VALKEY_PASSWORD}
+      Relay__Password: ${MAIL_RELAY_PASSWORD}
+      Upstream__Host: ${MAIL_UPSTREAM_HOST:-mailpit}
+      Upstream__Port: ${MAIL_UPSTREAM_PORT:-1025}
+      Upstream__StartTls: ${MAIL_UPSTREAM_STARTTLS:-false}
+      Upstream__Username: ${MAIL_UPSTREAM_USERNAME:-}
+      Upstream__Password: ${MAIL_UPSTREAM_PASSWORD:-}
+      Quotas__PerRecipientPerHour: ${MAIL_QUOTA_PER_RECIPIENT_PER_HOUR:-5}
+      Quotas__PerRecipientPerDay: ${MAIL_QUOTA_PER_RECIPIENT_PER_DAY:-20}
+      Quotas__PerTenantPerHour: ${MAIL_QUOTA_PER_TENANT_PER_HOUR:-500}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    stop_grace_period: 30s
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   mailpit:
     image: axllent/mailpit:v1.27
@@ -198,20 +248,24 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD};Maximum Pool Size=30;Timeout=15;Command Timeout=30
       ConnectionStrings__Redis: valkey:6379,password=${VALKEY_PASSWORD},abortConnect=false
       Keycloak__HealthUrl: http://keycloak:9000/health/ready
       Keycloak__BaseUrl: http://keycloak:8080
       Keycloak__ClientId: ${KEYCLOAK_MANAGEMENT_CLIENT_ID:-dovepeak-management}
       Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
-      Keycloak__Smtp__Host: mailpit
+      Keycloak__Smtp__Host: mail-relay
+      Keycloak__Smtp__RealmAsUsername: "true"
+      Keycloak__Smtp__Password: ${MAIL_RELAY_PASSWORD}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
       Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
       Platform__PortalRedirectUris__0: http://localhost:3100/api/auth/callback
       # Integration tests sign developers in through the portal client with this callback (local and CI stack only).
       Platform__PortalRedirectUris__1: http://localhost:3999/callback
-      Keycloak__Smtp__Port: "1025"
+      Keycloak__Smtp__Port: "2525"
       Keycloak__Smtp__StartTls: "false"
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:${MANAGEMENT_API_HOST_PORT:-5080}:8080"
     depends_on:
@@ -223,6 +277,8 @@ services:
         condition: service_completed_successfully
       db-migrate:
         condition: service_completed_successfully
+      mail-relay:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
       interval: 10s
@@ -242,6 +298,8 @@ services:
       APP_URL: http://localhost:${PORTAL_HOST_PORT:-3100}
       MANAGEMENT_API_URL: http://management-api:8080
       SESSION_REDIS_URL: redis://:${VALKEY_PASSWORD}@valkey:6379/2
+      # OTLP/HTTP (port 4318) for the Node.js SDK; empty disables tracing.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_HTTP_ENDPOINT:-}
     ports:
       - "127.0.0.1:${PORTAL_HOST_PORT:-3100}:3100"
     depends_on:
@@ -255,6 +313,77 @@ services:
       timeout: 5s
       retries: 10
 
+  # ---------------------------------------------------------------- Observability (M6.1)
+  # docker compose --profile observability up -d   (and set the OTEL_* variables in .env)
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+
+  tempo:
+    image: grafana/tempo:2.10.8
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./deploy/observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  prometheus:
+    image: prom/prometheus:v3.13.4
+    profiles: [observability]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.0
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./deploy/observability/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_HOST_PORT:-9093}:9093"
+    volumes:
+      - ./deploy/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.4.12
+    profiles: [observability]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin_local_only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3001}:3000"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
 volumes:
   postgres-data:
   valkey-data:
+  tempo-data:
+  prometheus-data:
+  grafana-data:

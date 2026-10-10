@@ -449,10 +449,10 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.5
 
-- [ ] `@dovepeak/identity` package built on `oauth4webapi` and `jose`.
-- [ ] Separate browser-safe and confidential server configuration types.
-- [ ] Typed error classes.
-- [ ] Unit tests.
+- [x] `@dovepeak/identity` package built on `oauth4webapi` and `jose`.
+- [x] Separate browser-safe and confidential server configuration types. *(A client secret in browser code is refused.)*
+- [x] Typed error classes.
+- [x] Unit tests. *(Plus contract tests against a live realm, run in CI.)*
 
 **Done when:** the core client completes Authorization Code with PKCE against a live realm in CI.
 
@@ -460,9 +460,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M5.1
 
-- [ ] `@dovepeak/identity/react` provider and hooks.
-- [ ] `@dovepeak/identity/next` BFF route handlers and middleware.
-- [ ] Documented browser threat model and token storage behaviour.
+- [x] `@dovepeak/identity/react` provider and hooks.
+- [x] `@dovepeak/identity/next` BFF route handlers and middleware. *(Tokens stay on the server.)*
+- [x] Documented browser threat model and token storage behaviour. *(`docs/sdk/browser-threat-model.md`.)*
 
 **Done when:** a Next.js app adds login, logout and a protected page using only the adapters.
 
@@ -470,9 +470,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M5.1
 
-- [ ] `@dovepeak/identity/node` verification helper.
-- [ ] Validates issuer, audience, signature, expiry and claims.
-- [ ] Optional introspection mode.
+- [x] `@dovepeak/identity/node` verification helper.
+- [x] Validates issuer, audience, signature, expiry and claims. *(RS256 only; roles and scopes.)*
+- [x] Optional introspection mode.
 
 **Done when:** verification tests reject every invalid token case from M1.3.
 
@@ -480,11 +480,11 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M3.8
 
-- [ ] `Dovepeak.Identity` NuGet package.
-- [ ] One-line JWT bearer setup for ASP.NET Core.
-- [ ] Typed Management API client.
-- [ ] `IOptions` and `HttpClientFactory` integration.
-- [ ] Optional introspection mode.
+- [x] `Dovepeak.Identity` NuGet package.
+- [x] One-line JWT bearer setup for ASP.NET Core. *(`AddDovepeakAuthentication`, `RequireScope`, `RequireDovepeakRole`.)*
+- [x] Typed Management API client.
+- [x] `IOptions` and `HttpClientFactory` integration.
+- [x] Optional introspection mode.
 
 **Done when:** a .NET API enforces roles and scopes using only the SDK.
 
@@ -492,9 +492,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M5.2, M5.3, M5.4
 
-- [ ] Next.js application using the BFF pattern.
-- [ ] React single-page application.
-- [ ] .NET protected API.
+- [x] Next.js application using the BFF pattern.
+- [x] React single-page application. *(Tokens in memory only.)*
+- [x] .NET protected API.
 
 **Done when:** each example integrates in under 30 minutes by following the documentation.
 
@@ -502,11 +502,13 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 **Depends on:** M5.5, M4.6
 
-- [ ] Semantic versioning and changesets.
-- [ ] Automated publishing to npm and NuGet.
-- [ ] Contract tests against the supported Keycloak version.
+- [x] Semantic versioning and changesets.
+- [x] Automated publishing to npm and NuGet. *(`release-sdks.yml`; needs the `NPM_TOKEN` and `NUGET_API_KEY` secrets.)*
+- [x] Contract tests against the supported Keycloak version.
 
 **Done when:** SDK beta versions are published and the first external beta developers are onboarded (Gate G3).
+
+> **Status (2026-10-10):** every Phase 5 milestone item is implemented and tested locally against the rebuilt stack: SDK unit tests (TypeScript 30, .NET 11), TypeScript contract tests against live Keycloak (4), the full .NET integration suite including the .NET SDK tests (174; 2 failed once on a Keycloak 500 during setup and passed on rerun), the Next.js BFF smoke test (12/12) and the React SPA browser test. Nothing has yet run in GitHub Actions and no package is published. Gate G3 still requires publishing the beta packages and onboarding the first external beta developers; M5.5's 30-minute integration target has not been timed with an outside developer.
 
 ---
 

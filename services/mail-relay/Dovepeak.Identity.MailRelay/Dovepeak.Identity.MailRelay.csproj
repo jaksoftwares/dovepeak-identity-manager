@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="SmtpServer" />
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\management-api\src\Dovepeak.Identity.Platform\Dovepeak.Identity.Platform.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dovepeak.Identity.MailRelay.Tests" />
+    <InternalsVisibleTo Include="Dovepeak.Identity.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

@@ -9,6 +9,12 @@
     <Project Path="sdks/dotnet/tests/Dovepeak.Identity.Tests/Dovepeak.Identity.Tests.csproj" />
   </Folder>
   <Folder Name="/services/" />
+  <Folder Name="/services/mail-relay/">
+    <Project Path="services/mail-relay/Dovepeak.Identity.MailRelay/Dovepeak.Identity.MailRelay.csproj" />
+  </Folder>
+  <Folder Name="/services/mail-relay/tests/">
+    <Project Path="services/mail-relay/tests/Dovepeak.Identity.MailRelay.Tests/Dovepeak.Identity.MailRelay.Tests.csproj" />
+  </Folder>
   <Folder Name="/services/management-api/" />
   <Folder Name="/services/management-api/src/">
     <Project Path="services/management-api/src/Dovepeak.Identity.Keycloak/Dovepeak.Identity.Keycloak.csproj" />

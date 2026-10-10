@@ -1,0 +1,57 @@
+# OpenTelemetry Collector (milestone M6.1): receives traces and metrics from the portal, Management API, workers,
+# mail relay and Keycloak; sends traces to Tempo and exposes metrics for Prometheus.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+  batch: {}
+  # Defence in depth: services never record query strings or credentials, but strip anything that slips through.
+  attributes/redact:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+      - key: url.query
+        action: delete
+  transform/redact-query:
+    trace_statements:
+      - context: span
+        statements:
+          - replace_pattern(attributes["url.full"], "[?].*$", "")
+          - replace_pattern(attributes["http.url"], "[?].*$", "")
+          - replace_pattern(attributes["http.target"], "[?].*$", "")
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, transform/redact-query, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

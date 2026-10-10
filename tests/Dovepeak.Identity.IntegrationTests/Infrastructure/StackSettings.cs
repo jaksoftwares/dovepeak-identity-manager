@@ -22,10 +22,13 @@ public sealed class StackSettings
 
     public required Uri MailpitUrl { get; init; }
 
-    /// <summary>SMTP host as seen from inside the Keycloak container.</summary>
+    /// <summary>SMTP host as seen from inside the Keycloak container: the Dovepeak mail relay, which forwards to Mailpit.</summary>
     public required string SmtpHost { get; init; }
 
     public required int SmtpPort { get; init; }
+
+    /// <summary>The mail relay password realms sign in with (the realm name is the user name).</summary>
+    public required string SmtpPassword { get; init; }
 
     public required string PostgresConnection { get; init; }
 
@@ -45,8 +48,9 @@ public sealed class StackSettings
             ManagementClientId = configuration["MANAGEMENT_CLIENT_ID"] ?? "dovepeak-management",
             ManagementClientSecret = configuration["MANAGEMENT_CLIENT_SECRET"] ?? "management_client_local_only",
             MailpitUrl = new Uri(configuration["MAILPIT_URL"] ?? "http://localhost:8025/"),
-            SmtpHost = configuration["SMTP_HOST"] ?? "mailpit",
-            SmtpPort = int.Parse(configuration["SMTP_PORT"] ?? "1025", System.Globalization.CultureInfo.InvariantCulture),
+            SmtpHost = configuration["SMTP_HOST"] ?? "mail-relay",
+            SmtpPort = int.Parse(configuration["SMTP_PORT"] ?? "2525", System.Globalization.CultureInfo.InvariantCulture),
+            SmtpPassword = configuration["SMTP_PASSWORD"] ?? "mail_relay_local_only",
             PostgresConnection = configuration["POSTGRES_CONNECTION"]
                 ?? "Host=localhost;Port=5442;Database=dovepeak;Username=dovepeak;Password=dovepeak_local_only",
             ManagementApiUrl = new Uri(configuration["MANAGEMENT_API_URL"] ?? "http://localhost:5080/"),

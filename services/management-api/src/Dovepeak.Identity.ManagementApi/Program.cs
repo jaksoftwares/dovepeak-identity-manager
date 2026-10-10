@@ -5,8 +5,14 @@ using Dovepeak.Identity.ManagementApi.Health;
 using Dovepeak.Identity.ManagementApi.Infrastructure;
 using Dovepeak.Identity.ManagementApi.Security;
 using Dovepeak.Identity.Platform;
+using Dovepeak.Identity.Platform.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddPlatformTelemetry("dovepeak-management-api");
+
+// In-flight requests finish before the process exits (the orchestrator stops routing on readiness first).
+builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(25));
 
 builder.Services.AddPlatformHealthChecks(builder.Configuration);
 builder.Services.AddManagementAuthentication(builder.Configuration);

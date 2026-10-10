@@ -1,0 +1,123 @@
+# Operational alerts (milestone M6.1): authentication anomalies, email, drift, background jobs and component health.
+# Each alert names the runbook to follow. Thresholds are starting points; tune them to production traffic.
+groups:
+  - name: authentication-anomalies
+    rules:
+      - alert: SignInFailureSpike
+        # Credential stuffing or a broken integration: many failed sign-ins, and failures dominate in a realm.
+        expr: |
+          sum by (realm) (rate(keycloak_user_events_total{event="login",error!=""}[5m])) * 60 > 30
+          and
+          sum by (realm) (rate(keycloak_user_events_total{event="login",error!=""}[5m]))
+            / clamp_min(sum by (realm) (rate(keycloak_user_events_total{event="login"}[5m])), 1e-9) > 0.5
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Failed sign-ins spiking in realm {{ $labels.realm }}"
+          description: "{{ $value | humanize }} failed sign-ins per minute, more than half of all attempts. Check the audit log for source addresses; see docs/operations/observability.md#authentication-anomalies."
+      - alert: AccountLockoutSpike
+        expr: sum by (realm) (increase(keycloak_user_events_total{event="login",error="user_temporarily_disabled"}[10m])) > 20
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Many temporary account lockouts in realm {{ $labels.realm }}"
+          description: "{{ $value | humanize }} sign-ins hit locked accounts in 10 minutes: a password-guessing campaign is likely."
+      - alert: EdgeRateLimitingSpike
+        expr: sum by (router) (rate(traefik_router_requests_total{code="429"}[5m])) * 60 > 60
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Edge rate limiting is rejecting many requests on {{ $labels.router }}"
+          description: "{{ $value | humanize }} requests per minute answered with 429. Abuse is being contained; confirm it is not a legitimate integration."
+      - alert: RegistrationSpike
+        expr: sum by (realm) (increase(keycloak_user_events_total{event="register",error=""}[1h])) > 500
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Unusual number of registrations in realm {{ $labels.realm }}"
+          description: "{{ $value | humanize }} accounts registered in one hour: possible automated sign-ups."
+
+  - name: email
+    rules:
+      - alert: EmailDeliveryFailing
+        expr: sli:email_failed:ratio_rate10m > 0.05 and sum(increase(dovepeak_email_messages_total{outcome="failed"}[10m])) >= 2
+        for: 1m
+        labels: { severity: critical, slo: email }
+        annotations:
+          summary: Emails are not reaching the provider
+          description: "{{ $value | humanizePercentage }} of emails failed in the last 10 minutes. Users cannot verify accounts or reset passwords. See docs/runbooks/email-provider-outage.md."
+      - alert: EmailQuotaThrottling
+        expr: sum by (realm, reason) (increase(dovepeak_email_messages_total{outcome="throttled"}[15m])) > 10
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Email quotas are dropping messages in realm {{ $labels.realm }} ({{ $labels.reason }})"
+          description: "{{ $value | humanize }} emails dropped in 15 minutes: someone may be flooding an inbox with recovery emails, or a tenant needs a higher quota."
+
+  - name: configuration
+    rules:
+      - alert: ConfigurationDriftCorrected
+        # Someone changed the identity engine directly (threat model T-01). Reconciliation reverted it; find out who.
+        # Counters appear on their first increment, so a series that did not exist 10 minutes ago is also a correction.
+        expr: |
+          sum by (kind) (increase(dovepeak_reconciliation_drift_corrections_total[10m])) > 0
+          or
+          sum by (kind) (dovepeak_reconciliation_drift_corrections_total unless dovepeak_reconciliation_drift_corrections_total offset 10m)
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Identity-engine configuration drift corrected ({{ $labels.kind }})"
+          description: "Reconciliation reverted {{ $value | humanize }} direct change(s) to Keycloak. Review drift.corrected entries in the audit log and the Keycloak admin events."
+      - alert: ReconciliationFailing
+        expr: sum(increase(dovepeak_reconciliation_runs_total{outcome="failed"}[15m])) > 0 and sum(increase(dovepeak_reconciliation_runs_total{outcome="succeeded"}[15m])) == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: Reconciliation cannot reach the identity engine
+          description: Drift is not being corrected. Check Keycloak health and the workers' logs.
+
+  - name: background-jobs
+    rules:
+      - alert: OutboxMessagesFailed
+        expr: |
+          sum by (type) (increase(dovepeak_outbox_messages_total{outcome="failed"}[30m])) > 0
+          or
+          sum by (type) (dovepeak_outbox_messages_total{outcome="failed"} unless dovepeak_outbox_messages_total{outcome="failed"} offset 30m)
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "Outbox messages of type {{ $labels.type }} gave up after all retries"
+          description: An environment or application may be left unprovisioned. Inspect failed outbox messages and retry once the cause is fixed.
+      - alert: WebhookDeliveriesFailing
+        expr: sum(increase(dovepeak_webhook_deliveries_total{outcome="failed"}[1h])) > 10
+        for: 0m
+        labels: { severity: info }
+        annotations:
+          summary: Many webhook deliveries are failing permanently
+          description: Usually a customer endpoint is down; failures are visible to tenants in the portal's delivery history.
+
+  - name: components
+    rules:
+      - alert: ServiceDown
+        expr: probe_success{job="readiness"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.service }} is not ready"
+          description: "The readiness probe of {{ $labels.service }} has failed for 2 minutes."
+      - alert: KeycloakNodeDown
+        expr: up{job="keycloak"} == 0
+        for: 2m
+        labels: { severity: critical, service: keycloak }
+        annotations:
+          summary: "Keycloak node {{ $labels.instance }} is down"
+          description: The cluster is running with reduced capacity; with a single node left, one more failure is an outage.
+      - alert: ManagementApiErrors
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{service_name="dovepeak-management-api",http_response_status_code=~"5.."}[5m]))
+          / clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name="dovepeak-management-api"}[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: warning, service: management-api }
+        annotations:
+          summary: Management API is returning errors
+          description: "{{ $value | humanizePercentage }} of Management API requests failed with a 5xx."

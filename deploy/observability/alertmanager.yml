@@ -1,0 +1,22 @@
+# Alertmanager: groups and routes alerts from Prometheus (milestone M6.1).
+# Production: set a real receiver (email, Slack, PagerDuty) - see docs/operations/observability.md.
+route:
+  receiver: default
+  group_by: [alertname, severity]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+  routes:
+    - receiver: default
+      matchers: [severity="critical"]
+      repeat_interval: 1h
+
+receivers:
+  # Placeholder: alerts are visible in the Alertmanager UI and API until a notifier is configured.
+  - name: default
+
+inhibit_rules:
+  # A component that is down explains its own latency and error alerts.
+  - source_matchers: [alertname="ServiceDown"]
+    target_matchers: [severity="warning"]
+    equal: [service]

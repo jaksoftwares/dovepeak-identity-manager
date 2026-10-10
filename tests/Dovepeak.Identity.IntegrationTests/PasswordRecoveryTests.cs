@@ -80,6 +80,32 @@ public sealed class PasswordRecoveryTests(TestRealm realm) : IClassFixture<TestR
         Assert.False(replay.HasForm("kc-passwd-update-form"));
     }
 
+    [Fact]
+    public async Task RecoveryEmails_ToOneAccount_AreCappedByTheMailRelay()
+    {
+        // Known limitation L-04 / milestone M6.4: an attacker using many IPs cannot flood one inbox. The relay's
+        // per-recipient quota (compose default 5 per hour) drops the excess silently, so the page looks the same.
+        var quota = int.Parse(Environment.GetEnvironmentVariable("DOVEPEAK_IT_MAIL_QUOTA_PER_RECIPIENT_PER_HOUR") ?? "5", System.Globalization.CultureInfo.InvariantCulture);
+        var user = await realm.CreateUserAsync();
+
+        for (var i = 0; i < quota + 2; i++)
+        {
+            using var browser = new BrowserSession(TestRealm.RedirectUri);
+            var confirmation = await RequestResetAsync(browser, realm.WebApp.CreateAuthorizationRequest(), user.Email);
+            Assert.Contains(RecoveryConfirmation, confirmation.Text, StringComparison.Ordinal);
+        }
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
+        while (await Mailpit.CountMessagesAsync(user.Email) < quota && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(500);
+        }
+
+        // Give any message that slipped past the quota time to arrive before counting.
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        Assert.Equal(quota, await Mailpit.CountMessagesAsync(user.Email));
+    }
+
     private static async Task<HtmlPage> RequestResetAsync(BrowserSession browser, AuthorizationRequest request, string email)
     {
         var loginPage = (await browser.GetAsync(request.Url)).RequirePage();

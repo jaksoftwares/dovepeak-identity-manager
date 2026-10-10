@@ -31,6 +31,15 @@ public sealed partial record RealmName
         return new RealmName(value);
     }
 
+    /// <summary>Parses a tenant realm name, returning false instead of throwing for invalid input.</summary>
+    public static bool TryParse(string? value, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out RealmName? realm)
+    {
+        realm = value is not null && ValidPattern().IsMatch(value) && !string.Equals(value, "master", StringComparison.Ordinal)
+            ? new RealmName(value)
+            : null;
+        return realm is not null;
+    }
+
     /// <summary>Creates the realm name for a project environment.</summary>
     public static RealmName ForEnvironment(Guid environmentId) => new($"dp-{environmentId:N}");
 

@@ -4,50 +4,47 @@ export default function ProtectApi() {
   return (
     <article>
       <h1>Protect an API</h1>
-      <p>Resource servers validate access tokens locally with the environment&apos;s public keys. Every check matters:</p>
-      <ul>
-        <li><strong>Signature</strong> with keys from the JWKS (discovered from the issuer), accepting only <code>RS256</code>.</li>
-        <li><strong>Issuer</strong> equal to your environment&apos;s issuer.</li>
-        <li><strong>Audience</strong> containing your API&apos;s identifier (add it to the calling application&apos;s audiences).</li>
-        <li><strong>Expiry</strong>, with at most a small clock skew.</li>
-      </ul>
-      <h2>ASP.NET Core</h2>
-      <pre>{`builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority = "<issuer>";
-        options.MapInboundClaims = false;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidIssuer = "<issuer>",
-            ValidAudience = "orders-api",
-            ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
-            ClockSkew = TimeSpan.FromSeconds(30),
-        };
-    });
+      <p>
+        Resource servers validate access tokens locally with the environment&apos;s public keys. The SDKs check the
+        signature (RS256 only), issuer, audience and expiry for you, and expose the token&apos;s roles and scopes.
+        Add your API&apos;s identifier as an <em>audience</em> on every application that calls it.
+      </p>
+      <h2>ASP.NET Core: <code>Dovepeak.Identity</code></h2>
+      <pre>{`dotnet add package Dovepeak.Identity`}</pre>
+      <pre>{`builder.Services.AddDovepeakAuthentication(builder.Configuration.GetSection("Dovepeak"));
 
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("admin", p => p.RequireClaim("roles", "administrator"))
-    .AddPolicy("orders:read", p => p.RequireAssertion(ctx =>
-        ctx.User.FindAll("scope").SelectMany(c => c.Value.Split(' ')).Contains("orders:read")));`}</pre>
-      <p>A complete example lives in <code>examples/dotnet-protected-api</code>.</p>
-      <h2>Node.js</h2>
-      <pre>{`import { createRemoteJWKSet, jwtVerify } from "jose";
+app.MapGet("/orders", () => ...).RequireScope("orders:read");
+app.MapDelete("/orders/{id}", (string id) => ...).RequireDovepeakRole("administrator");
 
-const issuer = "<issuer>";
-const jwks = createRemoteJWKSet(new URL(\`\${issuer}/protocol/openid-connect/certs\`));
+// appsettings.json
+{ "Dovepeak": { "Issuer": "<issuer>", "Audience": "orders-api" } }`}</pre>
+      <p>Roles also work with <code>[Authorize(Roles = "administrator")]</code> and <code>User.IsInRole</code>. A complete example lives in <code>examples/dotnet-protected-api</code>.</p>
+      <h2>Node.js: <code>@dovepeak/identity/node</code></h2>
+      <pre>{`import { createTokenVerifier, errorResponse, requirePermissions } from "@dovepeak/identity/node";
 
-export async function verify(token) {
-  const { payload } = await jwtVerify(token, jwks, { issuer, audience: "orders-api", algorithms: ["RS256"] });
-  return payload; // payload.roles, payload.scope
-}`}</pre>
+const verifier = createTokenVerifier({ issuer: "<issuer>", audience: "orders-api" });
+
+app.get("/orders", async (req, res) => {
+  try {
+    const token = await verifier.verifyAuthorizationHeader(req.headers.authorization);
+    requirePermissions(token, { scopes: ["orders:read"] });
+    res.json(await listOrders(token.subject));
+  } catch (error) {
+    const { status, headers } = errorResponse(error);   // 401 or 403
+    res.status(status).set(headers).end();
+  }
+});`}</pre>
       <h2>Roles and scopes</h2>
       <ul>
-        <li><code>roles</code>: array of the user&apos;s roles for the calling application (define and assign them on the application&apos;s Roles tab).</li>
+        <li><code>roles</code>: the user&apos;s roles for the calling application (define and assign them on the application&apos;s Roles tab).</li>
         <li><code>scope</code>: space-separated scopes. Define them per environment, grant them to applications, and have applications request them.</li>
       </ul>
-      <h2>Revocation</h2>
-      <p>Locally validated tokens stay valid until they expire (10 minutes by default). For operations that need immediate revocation, call the token introspection endpoint as well.</p>
+      <h2>Immediate revocation</h2>
+      <p>
+        Locally validated tokens stay valid until they expire (10 minutes by default). For operations that need
+        immediate revocation, enable introspection: <code>Introspection:Enabled</code> in .NET, or the
+        <code> introspection</code> option in Node.js, with your API&apos;s own confidential client credentials.
+      </p>
     </article>
   );
 }

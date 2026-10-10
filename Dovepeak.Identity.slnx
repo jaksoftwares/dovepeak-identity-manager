@@ -3,6 +3,11 @@
   <Folder Name="/examples/dotnet-protected-api/">
     <Project Path="examples/dotnet-protected-api/Dovepeak.Examples.ProtectedApi/Dovepeak.Examples.ProtectedApi.csproj" />
   </Folder>
+  <Folder Name="/sdks/" />
+  <Folder Name="/sdks/dotnet/">
+    <Project Path="sdks/dotnet/src/Dovepeak.Identity/Dovepeak.Identity.csproj" />
+    <Project Path="sdks/dotnet/tests/Dovepeak.Identity.Tests/Dovepeak.Identity.Tests.csproj" />
+  </Folder>
   <Folder Name="/services/" />
   <Folder Name="/services/management-api/" />
   <Folder Name="/services/management-api/src/">

@@ -4,7 +4,7 @@
 
 Dovepeak Identity gives applications a shared, secure identity platform — registration, login, sessions, tokens, roles and a developer portal — so teams stop rebuilding authentication for every product.
 
-> **Status:** Pre-alpha. Phases 0–3 (foundations, architecture validation, core identity platform, Management API and multi-tenancy) are complete; Gate G2 awaits the first internal application. Phase 4 (developer portal, tenant branding and email templates) is implemented. SDKs follow in Phase 5. Not production-ready. See the [implementation plan](implementation-plan.md).
+> **Status:** Pre-alpha. Phases 0–4 are complete (Gate G2 awaits the first internal application). Phase 5 (SDKs and developer experience) is implemented: TypeScript and .NET SDKs, examples built on them, and the release pipeline; Gate G3 awaits publishing and the first external beta developers. Not production-ready. See the [implementation plan](implementation-plan.md).
 
 ---
 
@@ -44,13 +44,14 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 /services/management-api    Management API, platform services, Keycloak integration library, persistence (EF Core)
 /services/workers           Background workers (outbox, webhooks, reconciliation, audit collection)
 /identity/keycloak          Realm template, user profile, bootstrap script, login theme
-/examples                   Next.js BFF and .NET protected API examples
+/examples                   Next.js BFF, React SPA and .NET protected API examples, built on the SDKs
 /tools                      dovepeak-dev CLI (demo setup, scale test, key rotation)
 /deploy                     Local edge and database configuration
 /tests                      Integration tests (.NET) and end-to-end tests (Node)
 /scripts                    CI scripts (log secret scanning)
 /portal                     Developer portal (Next.js backend-for-frontend) with built-in documentation
-/sdks                       SDKs (Phase 5)
+/sdks/typescript            @dovepeak/identity: OIDC client, Next.js BFF, React hooks, Node.js token verification
+/sdks/dotnet                Dovepeak.Identity: ASP.NET Core authentication, role/scope policies, Management API client
 /branding                   Brand assets and guidelines
 ```
 
@@ -143,9 +144,21 @@ curl -H "Authorization: Bearer $DOVEPEAK_API_KEY"   http://localhost:5080/v1/org
 | Integration tests (provisioning, flows, tokens, sessions, recovery, lockout, keys, audit, edge, Management API, tenant isolation) | `dotnet test tests/Dovepeak.Identity.IntegrationTests` | Yes |
 | BFF end-to-end | `node tests/e2e/bff-smoke.mjs` (see the example README) | Yes, plus the example apps |
 | Portal end-to-end (Playwright: the whole developer journey in a real browser) | `cd portal && npx playwright install chromium && npx playwright test` | Yes |
+| TypeScript SDK unit tests | `npm ci && npm run build:sdk && npm run test:sdk` | No |
+| TypeScript SDK contract tests (live Keycloak) | `npm run test:integration -w @dovepeak/identity` | Yes |
+| React SPA end-to-end (Playwright) | `npm run build -w @dovepeak/example-react-spa`, `npm run preview -w …`, then `cd examples/react-spa && npx playwright test` | Yes, plus the example API |
 | Log secret scan | `scripts/ci/scan-logs-for-secrets.sh` | Yes, after running the tests |
 
 Integration tests provision their own throwaway tenant realms through the production provisioning code and delete them afterwards. The Management API tests host the real API in-process, sign developers in through the real platform realm, and remove every organization they create. `DeployedStackTests` exercises the containerized API and workers with no in-process shortcuts. Every suite runs in CI on each pull request.
+
+## SDKs
+
+| Package | Install | Highlights |
+| ------- | ------- | ---------- |
+| [`@dovepeak/identity`](sdks/typescript/README.md) | `npm install @dovepeak/identity` | Authorization Code + PKCE client; `/next` backend-for-frontend with server-side sessions; `/react` hooks; `/node` token verification with optional introspection; typed errors |
+| [`Dovepeak.Identity`](sdks/dotnet/src/Dovepeak.Identity/README.md) | `dotnet add package Dovepeak.Identity` | One-line JWT bearer setup, `RequireScope` / `RequireDovepeakRole`, introspection, typed Management API client with `IHttpClientFactory` |
+
+The [browser threat model](docs/sdk/browser-threat-model.md) explains how tokens are stored and why a backend-for-frontend is recommended. The JavaScript packages are npm workspaces (`npm ci` at the repository root). Releases: [`.changeset/README.md`](.changeset/README.md).
 
 ## Developer CLI
 

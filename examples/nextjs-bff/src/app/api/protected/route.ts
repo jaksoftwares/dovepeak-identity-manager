@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
+import { session } from "@/lib/auth";
 import { config } from "@/lib/config";
-import { validAccessToken } from "@/lib/session";
 
 /**
- * Calls the protected .NET API on the user's behalf. The access token is attached server-side;
- * the browser only ever sees the API's response.
+ * Calls the protected .NET API on the user's behalf. The access token is attached server-side (refreshed by the
+ * SDK when needed); the browser only ever sees the API's response.
  */
 export async function GET() {
-  const accessToken = await validAccessToken();
+  const accessToken = await session().getAccessToken();
   if (!accessToken) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }

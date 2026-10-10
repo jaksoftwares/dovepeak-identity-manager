@@ -132,6 +132,9 @@ public sealed class ManagementApiFixture : IAsyncLifetime
 
     public ApiClient Anonymous() => new(_factory.CreateClient(), null, null);
 
+    /// <summary>A raw HTTP client for the in-process API (base address set, no credentials), e.g. for SDK clients.</summary>
+    public HttpClient CreateHttpClient() => _factory.CreateClient();
+
     public async Task ProcessOutboxAsync()
     {
         var processor = _factory.Services.GetRequiredService<OutboxProcessor>();

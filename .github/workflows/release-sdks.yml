@@ -1,0 +1,89 @@
+name: Release SDKs
+
+# npm: on main, Changesets opens a "Version packages" pull request; merging it publishes @dovepeak/identity with
+#      provenance. Requires the NPM_TOKEN secret (automation token scoped to the @dovepeak organization).
+# NuGet: pushing a tag dotnet-sdk-v<version> (matching <Version> in Dovepeak.Identity.csproj) publishes
+#        Dovepeak.Identity. Requires the NUGET_API_KEY secret.
+# Both run only after CI's contract tests have passed on the commit (branch protection on main).
+
+on:
+  push:
+    branches: [main]
+    tags: ["dotnet-sdk-v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: npm (@dovepeak/identity)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Version pull request or publish
+        uses: changesets/action@v1
+        with:
+          version: npm run version-packages
+          publish: npm run release
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+
+  nuget:
+    name: NuGet (Dovepeak.Identity)
+    if: startsWith(github.ref, 'refs/tags/dotnet-sdk-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Check the tag matches the project version
+        run: |
+          version=$(grep -oPm1 '(?<=<Version>)[^<]+' sdks/dotnet/src/Dovepeak.Identity/Dovepeak.Identity.csproj)
+          test "dotnet-sdk-v${version}" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} does not match version ${version}"; exit 1; }
+
+      - name: Test
+        run: dotnet test sdks/dotnet/tests/Dovepeak.Identity.Tests --configuration Release
+
+      - name: Pack
+        run: >-
+          dotnet pack sdks/dotnet/src/Dovepeak.Identity --configuration Release --output artifacts
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Publish
+        run: >-
+          dotnet nuget push "artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts
+          retention-days: 30

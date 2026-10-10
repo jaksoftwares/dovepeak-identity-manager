@@ -1,4 +1,6 @@
-import { currentSession } from "@/lib/session";
+import { DovepeakProvider } from "@dovepeak/identity/react";
+import { session } from "@/lib/auth";
+import { SignInButtons, SignOutButton } from "./auth-buttons";
 import { CallApi } from "./call-api";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +12,9 @@ const errors: Record<string, string> = {
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  const current = await currentSession();
+  const user = await session().getSession();
 
-  if (!current) {
+  if (!user) {
     return (
       <section className="card">
         <h1>Welcome</h1>
@@ -21,21 +23,15 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
           server; your browser only holds an HttpOnly session cookie.
         </p>
         {error && errors[error] && <p className="notice">{errors[error]}</p>}
-        <div className="actions">
-          <a className="button primary" href="/api/auth/login">
-            Sign in
-          </a>
-          <a className="button" href="/api/auth/login?register=1">
-            Create account
-          </a>
-        </div>
+        <DovepeakProvider initialUser={null}>
+          <SignInButtons />
+        </DovepeakProvider>
       </section>
     );
   }
 
-  const { user } = current.session;
   return (
-    <>
+    <DovepeakProvider initialUser={user}>
       <section className="card">
         <h1>Signed in</h1>
         <dl>
@@ -44,13 +40,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
           <dt>Subject</dt>
           <dd>{user.sub}</dd>
         </dl>
-        <div className="actions">
-          <form method="post" action="/api/auth/logout">
-            <button className="button" type="submit">
-              Sign out
-            </button>
-          </form>
-        </div>
+        <SignOutButton />
       </section>
       <section className="card">
         <h1>Protected API</h1>
@@ -60,6 +50,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
         </p>
         <CallApi />
       </section>
-    </>
+    </DovepeakProvider>
   );
 }

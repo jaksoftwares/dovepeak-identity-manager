@@ -48,6 +48,34 @@ jobs:
           path: TestResults
           retention-days: 14
 
+  typescript-sdk:
+    name: TypeScript SDK build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Typecheck, build and unit-test the SDK
+        run: |
+          npm run typecheck -w @dovepeak/identity
+          npm run build -w @dovepeak/identity
+          npm test -w @dovepeak/identity
+
+      - name: Check the published package contents
+        working-directory: sdks/typescript
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e "const f=require('./pack.json')[0].files.map(x=>x.path); for (const p of ['dist/index.js','dist/node/index.js','dist/next/index.js','dist/react/index.js','README.md','LICENSE']) if (!f.includes(p)) { console.error('missing', p); process.exit(1); } if (f.some(p=>p.startsWith('test')||p.startsWith('src/'))) { console.error('tests or sources would be published'); process.exit(1); }"
+
   integration:
     name: Integration and end-to-end tests
     runs-on: ubuntu-latest
@@ -64,7 +92,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: |
-            examples/nextjs-bff/package-lock.json
+            package-lock.json
             portal/package-lock.json
 
       - name: Start the stack
@@ -80,6 +108,12 @@ jobs:
           dotnet test tests/Dovepeak.Identity.IntegrationTests --configuration Release --no-build
           --logger trx --results-directory TestResults
           --blame-hang-timeout 15m --blame-hang-dump-type none
+
+      - name: SDK contract tests against Keycloak
+        run: |
+          npm ci
+          npm run build -w @dovepeak/identity
+          npm run test:integration -w @dovepeak/identity
 
       - name: Export the OpenAPI document
         run: |
@@ -100,18 +134,24 @@ jobs:
           nohup dotnet run --project examples/dotnet-protected-api/Dovepeak.Examples.ProtectedApi \
             --configuration Release --no-build -- \
             --Auth:Issuer=http://localhost:8080/realms/dp-demo --Auth:Audience=dovepeak-demo-api \
-            --Auth:RequireHttpsMetadata=false > protected-api.log 2>&1 &
-          cd examples/nextjs-bff
-          npm ci
-          npm run typecheck
-          npm run build
-          nohup npm start > ../../bff.log 2>&1 &
-          cd ../..
+            --Auth:RequireHttpsMetadata=false --Cors:AllowedOrigins:0=http://localhost:5173 > protected-api.log 2>&1 &
+          npm run typecheck -w @dovepeak/example-nextjs-bff
+          npm run build -w @dovepeak/example-nextjs-bff
+          nohup npm start -w @dovepeak/example-nextjs-bff > bff.log 2>&1 &
           for i in $(seq 1 60); do
             curl -sf http://localhost:3000/ > /dev/null && curl -sf http://localhost:5301/public > /dev/null && break
             sleep 2
           done
           node tests/e2e/bff-smoke.mjs
+
+      - name: React SPA end-to-end test
+        run: |
+          npm run build -w @dovepeak/example-react-spa
+          nohup npm run preview -w @dovepeak/example-react-spa > spa.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:5173/ > /dev/null && break; sleep 2; done
+          cd examples/react-spa
+          npx playwright install --with-deps chromium
+          npx playwright test
 
       - name: Portal end-to-end tests
         working-directory: portal
@@ -141,6 +181,7 @@ jobs:
             stack.log
             protected-api.log
             bff.log
+            spa.log
           retention-days: 14
 
       - name: Stop the stack

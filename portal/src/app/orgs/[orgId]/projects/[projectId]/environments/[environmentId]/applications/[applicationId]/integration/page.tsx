@@ -60,14 +60,16 @@ DOVEPEAK_REDIRECT_URI=${redirect}`}</pre>
 
       <Card title="Protect your API">
         <p>Validate access tokens locally: signature from the JWKS, issuer, audience, expiry, and an explicit algorithm allow-list.</p>
-        <pre>{`// ASP.NET Core
-builder.Services.AddAuthentication().AddJwtBearer(o =>
+        <pre>{`// ASP.NET Core (dotnet add package Dovepeak.Identity)
+builder.Services.AddDovepeakAuthentication(o =>
 {
-    o.Authority = "${config.issuer}";
-    o.TokenValidationParameters.ValidAudience = "${audience}";
-    o.TokenValidationParameters.ValidAlgorithms = ["RS256"];
-    o.MapInboundClaims = false;
-});`}</pre>
+    o.Issuer = "${config.issuer}";
+    o.Audience = "${audience}";
+});
+app.MapGet("/orders", () => ...).RequireScope("orders:read");
+
+// Node.js (npm install @dovepeak/identity)
+const verifier = createTokenVerifier({ issuer: "${config.issuer}", audience: "${audience}" });`}</pre>
         <p className="small"><Link href="/docs/protect-an-api">Protecting an API</Link> covers roles (<code>roles</code> claim) and scopes (<code>scope</code> claim).</p>
       </Card>
     </>

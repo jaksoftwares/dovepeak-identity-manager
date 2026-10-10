@@ -1,0 +1,83 @@
+# Service-level indicators and burn-rate alerts (docs/operations/service-level-objectives.md).
+# Availability: 99.9% of public edge requests are not 5xx. Sign-in latency: 95% of credential requests under 300 ms.
+groups:
+  - name: sli
+    interval: 30s
+    rules:
+      # ---- Availability: share of public requests answered with a 5xx.
+      - record: sli:edge_errors:ratio_rate5m
+        expr: |
+          (sum(rate(traefik_router_requests_total{code=~"5.."}[5m])) or vector(0))
+          / clamp_min(sum(rate(traefik_router_requests_total[5m])), 1e-9)
+      - record: sli:edge_errors:ratio_rate30m
+        expr: |
+          (sum(rate(traefik_router_requests_total{code=~"5.."}[30m])) or vector(0))
+          / clamp_min(sum(rate(traefik_router_requests_total[30m])), 1e-9)
+      - record: sli:edge_errors:ratio_rate1h
+        expr: |
+          (sum(rate(traefik_router_requests_total{code=~"5.."}[1h])) or vector(0))
+          / clamp_min(sum(rate(traefik_router_requests_total[1h])), 1e-9)
+      - record: sli:edge_errors:ratio_rate6h
+        expr: |
+          (sum(rate(traefik_router_requests_total{code=~"5.."}[6h])) or vector(0))
+          / clamp_min(sum(rate(traefik_router_requests_total[6h])), 1e-9)
+
+      # ---- Sign-in latency: share of credential requests slower than 300 ms (0.3 is a Traefik histogram bucket).
+      - record: sli:signin_slow:ratio_rate5m
+        expr: |
+          1 - sum(rate(traefik_router_request_duration_seconds_bucket{router="credentials@file",le="0.3"}[5m]))
+          / clamp_min(sum(rate(traefik_router_request_duration_seconds_count{router="credentials@file"}[5m])), 1e-9)
+      - record: sli:signin_slow:ratio_rate30m
+        expr: |
+          1 - sum(rate(traefik_router_request_duration_seconds_bucket{router="credentials@file",le="0.3"}[30m]))
+          / clamp_min(sum(rate(traefik_router_request_duration_seconds_count{router="credentials@file"}[30m])), 1e-9)
+      - record: sli:signin_slow:ratio_rate1h
+        expr: |
+          1 - sum(rate(traefik_router_request_duration_seconds_bucket{router="credentials@file",le="0.3"}[1h]))
+          / clamp_min(sum(rate(traefik_router_request_duration_seconds_count{router="credentials@file"}[1h])), 1e-9)
+      - record: sli:signin_slow:ratio_rate6h
+        expr: |
+          1 - sum(rate(traefik_router_request_duration_seconds_bucket{router="credentials@file",le="0.3"}[6h]))
+          / clamp_min(sum(rate(traefik_router_request_duration_seconds_count{router="credentials@file"}[6h])), 1e-9)
+      - record: sli:signin_latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(traefik_router_request_duration_seconds_bucket{router="credentials@file"}[5m])))
+
+      # ---- Email delivery: share of relayed emails the provider did not accept.
+      - record: sli:email_failed:ratio_rate10m
+        expr: |
+          sum(rate(dovepeak_email_messages_total{outcome="failed"}[10m]))
+          / clamp_min(sum(rate(dovepeak_email_messages_total{outcome=~"sent|failed"}[10m])), 1e-9)
+
+  - name: slo-burn-rate
+    rules:
+      # Budget: 0.1% errors. 14.4x burns 2% of a 30-day budget per hour; 6x burns 5% per 6 hours.
+      - alert: AvailabilityFastBurn
+        expr: sli:edge_errors:ratio_rate1h > (14.4 * 0.001) and sli:edge_errors:ratio_rate5m > (14.4 * 0.001)
+        for: 2m
+        labels: { severity: critical, slo: availability }
+        annotations:
+          summary: Authentication availability error budget is burning fast
+          description: "{{ $value | humanizePercentage }} of public requests failed with a 5xx over the last hour. See docs/operations/observability.md#investigating."
+      - alert: AvailabilitySlowBurn
+        expr: sli:edge_errors:ratio_rate6h > (6 * 0.001) and sli:edge_errors:ratio_rate30m > (6 * 0.001)
+        for: 15m
+        labels: { severity: warning, slo: availability }
+        annotations:
+          summary: Authentication availability error budget is burning
+          description: "{{ $value | humanizePercentage }} of public requests failed with a 5xx over the last 6 hours."
+
+      # Budget: 5% of credential requests may be slower than 300 ms.
+      - alert: SignInLatencyFastBurn
+        expr: sli:signin_slow:ratio_rate1h > (14.4 * 0.05) and sli:signin_slow:ratio_rate5m > (14.4 * 0.05)
+        for: 2m
+        labels: { severity: critical, slo: latency }
+        annotations:
+          summary: Sign-in latency objective is burning fast
+          description: "{{ $value | humanizePercentage }} of sign-in requests took longer than 300 ms over the last hour."
+      - alert: SignInLatencySlowBurn
+        expr: sli:signin_slow:ratio_rate6h > (6 * 0.05) and sli:signin_slow:ratio_rate30m > (6 * 0.05)
+        for: 15m
+        labels: { severity: warning, slo: latency }
+        annotations:
+          summary: Sign-in latency objective is burning
+          description: "{{ $value | humanizePercentage }} of sign-in requests took longer than 300 ms over the last 6 hours."

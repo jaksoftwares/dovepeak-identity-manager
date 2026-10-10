@@ -1,0 +1,60 @@
+# Prometheus (milestone M6.1). Platform services push metrics through the OpenTelemetry Collector; Keycloak and the
+# edge proxy are scraped directly.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: [otel-collector:8889]
+
+  - job_name: keycloak
+    metrics_path: /metrics
+    dns_sd_configs:
+      # Every Keycloak node (one locally, two or more in production) answers on the "keycloak" service name.
+      - names: [keycloak]
+        type: A
+        port: 9000
+
+  - job_name: edge
+    static_configs:
+      - targets: [edge:8083]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  # Readiness of each component, probed from inside the network by the blackbox exporter.
+  - job_name: readiness
+    metrics_path: /probe
+    params:
+      module: [http_ready]
+    static_configs:
+      - targets: ["http://keycloak:9000/health/ready"]
+        labels: { service: keycloak }
+      - targets: ["http://management-api:8080/health/ready"]
+        labels: { service: management-api }
+      - targets: ["http://workers:8080/health/ready"]
+        labels: { service: workers }
+      - targets: ["http://mail-relay:8080/health/ready"]
+        labels: { service: mail-relay }
+      - targets: ["http://portal:3100/"]
+        labels: { service: portal }
+      - targets: ["http://edge:8082/ping"]
+        labels: { service: edge }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dovepeak.Identity.Keycloak;
 using Dovepeak.Identity.Persistence;
 using Dovepeak.Identity.Persistence.Tenancy;
+using Dovepeak.Identity.Platform.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -66,11 +67,14 @@ public sealed partial class OutboxProcessor(IServiceScopeFactory scopeFactory, T
             return;
         }
 
+        using var activity = PlatformTelemetry.ActivitySource.StartActivity("outbox " + message.Type);
+        activity?.SetTag("dovepeak.outbox.attempt", message.Attempts + 1);
         try
         {
             await HandleAsync(scope.ServiceProvider, db, message, ct);
             message.ProcessedAt = timeProvider.GetUtcNow();
             message.LastError = null;
+            PlatformTelemetry.OutboxMessages.Add(1, new("type", message.Type), new("outcome", "succeeded"));
         }
         catch (Exception ex) when (ex is KeycloakAdminException or HttpRequestException or TaskCanceledException or DbUpdateException)
         {
@@ -78,8 +82,11 @@ public sealed partial class OutboxProcessor(IServiceScopeFactory scopeFactory, T
             message.LastError = ex.Message.Length > 1900 ? ex.Message[..1900] : ex.Message;
             message.NextAttemptAt = timeProvider.GetUtcNow() + Backoff(message.Attempts);
             LogRetry(logger, ex, message.Type, message.Id, message.Attempts);
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.GetType().Name);
 
-            if (message.Attempts >= MaxAttempts)
+            var failed = message.Attempts >= MaxAttempts;
+            PlatformTelemetry.OutboxMessages.Add(1, new("type", message.Type), new("outcome", failed ? "failed" : "retried"));
+            if (failed)
             {
                 await MarkFailedAsync(db, message, ct);
                 message.ProcessedAt = timeProvider.GetUtcNow();

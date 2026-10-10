@@ -4,6 +4,7 @@ using Dovepeak.Identity.Persistence;
 using Dovepeak.Identity.Persistence.Tenancy;
 using Dovepeak.Identity.Platform.Applications;
 using Dovepeak.Identity.Platform.Audit;
+using Dovepeak.Identity.Platform.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -41,9 +42,11 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
             try
             {
                 corrections.AddRange(await ReconcileEnvironmentAsync(id, ct));
+                PlatformTelemetry.ReconciliationRuns.Add(1, new KeyValuePair<string, object?>("outcome", "succeeded"));
             }
             catch (Exception ex) when (ex is KeycloakAdminException or HttpRequestException)
             {
+                PlatformTelemetry.ReconciliationRuns.Add(1, new KeyValuePair<string, object?>("outcome", "failed"));
                 LogEnvironmentFailed(logger, ex, id);
             }
         }
@@ -63,11 +66,14 @@ public sealed partial class ReconciliationService(IServiceScopeFactory scopeFact
 
         var environment = await db.Environments.SingleAsync(e => e.Id == environmentId, ct);
         var realm = RealmName.Parse(environment.RealmName);
+        using var activity = PlatformTelemetry.ActivitySource.StartActivity("reconcile environment");
+        activity?.SetTag("dovepeak.realm", realm.Value);
         var corrections = new List<DriftCorrection>();
         void Corrected(string kind, string subject, object? details = null)
         {
             corrections.Add(new DriftCorrection(environment.OrganizationId, realm.Value, kind, subject));
             audit.Record(environment.OrganizationId, "drift.corrected", "environment", environment.Id, new { kind, subject, details });
+            PlatformTelemetry.DriftCorrections.Add(1, new KeyValuePair<string, object?>("kind", kind));
             LogDrift(logger, kind, subject, realm.Value);
         }
 

@@ -9,6 +9,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Npgsql.OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Dovepeak.Identity.Keycloak\Dovepeak.Identity.Keycloak.csproj" />
     <ProjectReference Include="..\Dovepeak.Identity.Persistence\Dovepeak.Identity.Persistence.csproj" />
   </ItemGroup>

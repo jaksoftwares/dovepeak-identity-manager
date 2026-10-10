@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Dovepeak.Identity.Keycloak;
 using Dovepeak.Identity.Persistence;
 using Dovepeak.Identity.Persistence.Audit;
+using Dovepeak.Identity.Platform.Telemetry;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dovepeak.Identity.Workers.Audit;
@@ -143,6 +144,7 @@ public sealed partial class AuditEventCollector(
 
         if (inserted > 0)
         {
+            PlatformTelemetry.AuditEventsCollected.Add(inserted, new KeyValuePair<string, object?>("source", source));
             LogCollected(logger, inserted, source, realm.Value);
         }
 

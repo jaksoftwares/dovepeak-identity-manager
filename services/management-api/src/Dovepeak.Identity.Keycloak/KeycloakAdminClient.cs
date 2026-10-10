@@ -191,7 +191,7 @@ public sealed class KeycloakAdminClient(
     private static string Path(ClientScopeAssignment assignment) =>
         assignment == ClientScopeAssignment.Optional ? "optional-client-scopes" : "default-client-scopes";
 
-    private static readonly string[] SmtpKeys = ["host", "port", "from", "ssl", "starttls", "auth"];
+    private static readonly string[] SmtpKeys = ["host", "port", "from", "ssl", "starttls", "auth", "user"];
 
     /// <summary>
     /// Makes the realm send email through the configured SMTP server. Returns false when nothing changed or no SMTP
@@ -206,7 +206,7 @@ public sealed class KeycloakAdminClient(
             return false;
         }
 
-        var desired = RealmTemplate.BuildSmtp(smtp);
+        var desired = RealmTemplate.BuildSmtp(smtp, realm);
         var actual = representation["smtpServer"] as JsonObject;
         var matches = actual is not null
             && SmtpKeys.All(key =>

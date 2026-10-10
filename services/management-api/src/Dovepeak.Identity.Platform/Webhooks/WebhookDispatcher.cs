@@ -4,6 +4,7 @@ using System.Text;
 using Dovepeak.Identity.Persistence;
 using Dovepeak.Identity.Persistence.Tenancy;
 using Dovepeak.Identity.Platform.Common;
+using Dovepeak.Identity.Platform.Telemetry;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,6 +96,7 @@ public sealed partial class WebhookDispatcher(
                 delivery.Status = WebhookDeliveryStatus.Delivered;
                 delivery.DeliveredAt = now;
                 delivery.LastError = null;
+                PlatformTelemetry.WebhookDeliveries.Add(1, new KeyValuePair<string, object?>("outcome", "delivered"));
             }
             else
             {
@@ -117,8 +119,11 @@ public sealed partial class WebhookDispatcher(
         if (delivery.Attempts >= MaxAttempts)
         {
             delivery.Status = WebhookDeliveryStatus.Failed;
+            PlatformTelemetry.WebhookDeliveries.Add(1, new KeyValuePair<string, object?>("outcome", "failed"));
             return;
         }
+
+        PlatformTelemetry.WebhookDeliveries.Add(1, new KeyValuePair<string, object?>("outcome", "retried"));
 
         // 30s, 1m, 2m, 4m ... capped at 6 hours.
         delivery.NextAttemptAt = now + TimeSpan.FromSeconds(Math.Min(21600, 30 * Math.Pow(2, delivery.Attempts - 1)));

@@ -51,7 +51,7 @@ public sealed class RealmTemplate
 
         if (!string.IsNullOrWhiteSpace(smtp.Host))
         {
-            representation["smtpServer"] = BuildSmtp(smtp);
+            representation["smtpServer"] = BuildSmtp(smtp, realm);
         }
 
         return representation;
@@ -67,8 +67,12 @@ public sealed class RealmTemplate
     }
 
     /// <summary>The realm SMTP server representation for the configured mail settings.</summary>
-    public static JsonObject BuildSmtp(SmtpOptions smtp)
+    public static JsonObject BuildSmtp(SmtpOptions smtp, RealmName realm)
     {
+        ArgumentNullException.ThrowIfNull(smtp);
+        ArgumentNullException.ThrowIfNull(realm);
+        var username = !string.IsNullOrEmpty(smtp.Username) ? smtp.Username : smtp.RealmAsUsername ? realm.Value : null;
+
         // Keycloak expects every SMTP setting as a string.
         var server = new JsonObject
         {
@@ -78,12 +82,12 @@ public sealed class RealmTemplate
             ["fromDisplayName"] = smtp.FromDisplayName,
             ["ssl"] = smtp.Ssl ? "true" : "false",
             ["starttls"] = smtp.StartTls ? "true" : "false",
-            ["auth"] = string.IsNullOrEmpty(smtp.Username) ? "false" : "true",
+            ["auth"] = username is null ? "false" : "true",
         };
 
-        if (!string.IsNullOrEmpty(smtp.Username))
+        if (username is not null)
         {
-            server["user"] = smtp.Username;
+            server["user"] = username;
             server["password"] = smtp.Password;
         }
 

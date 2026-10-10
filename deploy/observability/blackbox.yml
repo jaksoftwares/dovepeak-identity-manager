@@ -1,0 +1,8 @@
+# Readiness probes for every platform component (milestone M6.1): the ServiceDown alert and the dashboard status row.
+modules:
+  http_ready:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [200]
+      preferred_ip_protocol: ip4

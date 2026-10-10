@@ -40,5 +40,11 @@ public sealed class SmtpOptions
 
     public string? Username { get; set; }
 
+    /// <summary>
+    /// Signs in to the SMTP server with the realm name as the user name (and <see cref="Password"/>), so the Dovepeak
+    /// mail relay can apply per-tenant and per-recipient sending quotas. Ignored when <see cref="Username"/> is set.
+    /// </summary>
+    public bool RealmAsUsername { get; set; }
+
     public string? Password { get; set; }
 }

@@ -19,6 +19,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ orgId:
         title={project.name}
         subtitle={<>Slug <code>{project.slug}</code></>}
         crumbs={[{ href: `/orgs/${orgId}/projects`, label: "Projects" }]}
+        actions={<Link className="button secondary" href={`/orgs/${orgId}/projects/${projectId}/branding`}>Branding and emails</Link>}
       />
       {provisioning && (
         <div className="alert warn" role="status">

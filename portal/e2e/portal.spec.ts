@@ -82,6 +82,28 @@ test("a new developer onboards an application end to end", async ({ page, contex
     await expect(page.getByTestId("env-development")).toBeVisible({ timeout: 1000 });
     await expect(page.getByTestId("env-production")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 120_000 });
+  // ---------------------------------------------------------------- Branding and email templates (all environments)
+  const projectUrl = page.url();
+  await page.getByRole("link", { name: "Branding and emails" }).click();
+  await expect(page).toHaveURL(/\/branding$/);
+  await page.getByLabel(/^Logo URL/).fill("https://cdn.example.com/storefront.png");
+  await page.getByLabel("Use the Dovepeak colour").uncheck();
+  await page.locator("input[name=primaryColor]").fill("#0b5ed7");
+  await page.locator("input[name=emailVerificationSubject]").fill("Confirm your Storefront account");
+  await page.locator("textarea[name=emailVerificationIntro]").fill("Welcome to Storefront!");
+  await expect(page.getByTestId("preview-button")).toHaveCSS("background-color", "rgb(11, 94, 215)");
+  await page.getByRole("button", { name: "Save branding" }).click();
+  await success(page, "Branding saved");
+  await page.reload();
+  await expect(page.locator("input[name=emailVerificationSubject]")).toHaveValue("Confirm your Storefront account");
+  await expect(page.locator("input[name=primaryColor]")).toHaveValue("#0b5ed7");
+
+  // Unsafe values are refused with an explanation.
+  await page.getByLabel(/^Logo URL/).fill("http://cdn.example.com/storefront.png");
+  await page.getByRole("button", { name: "Save branding" }).click();
+  await expect(page.locator(".alert.error")).toContainText("HTTPS");
+  await page.goto(projectUrl);
+
   await page.getByTestId("env-development").click();
   await expect(page).toHaveURL(/\/environments\/[0-9a-f-]+$/);
   const envUrl = page.url();
@@ -180,7 +202,7 @@ test("a new developer onboards an application end to end", async ({ page, contex
   // Unsafe destinations are refused with a clear message.
   await page.getByLabel(/^Endpoint URL/).fill("https://169.254.169.254/latest");
   await page.getByRole("button", { name: "Add endpoint" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".alert.error")).toBeVisible();
 
   // ---------------------------------------------------------------- Audit log and documentation
   await page.goto(`${orgUrl}/audit?source=management`);

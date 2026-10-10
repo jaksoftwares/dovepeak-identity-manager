@@ -22,3 +22,4 @@ This directory records significant architectural decisions for Dovepeak Identity
 | [0007](0007-edge-proxy-and-admin-separation.md)        | Edge proxy, rate limiting, admin separation | Proposed                               |
 | [0008](0008-tenant-isolation-in-the-management-plane.md) | Tenant isolation in the management plane | Proposed                                 |
 | [0009](0009-developer-portal-architecture.md)          | Developer portal architecture             | Proposed                                 |
+| [0010](0010-tenant-branding-and-email-templates.md)    | Tenant branding and email templates       | Proposed                                 |

@@ -4,7 +4,7 @@
 
 Dovepeak Identity gives applications a shared, secure identity platform — registration, login, sessions, tokens, roles and a developer portal — so teams stop rebuilding authentication for every product.
 
-> **Status:** Pre-alpha. Phases 0–3 (foundations, architecture validation, core identity platform, Management API and multi-tenancy) are complete; Gate G2 awaits the first internal application. Phase 4 (developer portal) is implemented except per-tenant branding and email templates. SDKs follow in Phase 5. Not production-ready. See the [implementation plan](implementation-plan.md).
+> **Status:** Pre-alpha. Phases 0–3 (foundations, architecture validation, core identity platform, Management API and multi-tenancy) are complete; Gate G2 awaits the first internal application. Phase 4 (developer portal, tenant branding and email templates) is implemented. SDKs follow in Phase 5. Not production-ready. See the [implementation plan](implementation-plan.md).
 
 ---
 
@@ -121,6 +121,7 @@ The Management API (`/v1`) is how developers and automation configure Dovepeak I
 | Authorization | Organization roles nest: viewer ⊂ developer ⊂ admin ⊂ owner. API keys carry explicit scopes no broader than their creator's; managing the organization, members and API keys is reserved for people |
 | Tenant isolation | Central authorization, EF Core query filters and forced PostgreSQL Row-Level Security; another organization's resources always return `404` ([ADR-0008](docs/adr/0008-tenant-isolation-in-the-management-plane.md)) |
 | Token policy | Per application: access token lifetime (5–60 min) and session idle and maximum timeouts; omitted values inherit the environment baseline (10 min, 30 min, 12 h). The `/config` endpoint returns the effective values |
+| Branding | Per project, in every environment: logo, brand colour (readable button text chosen automatically) and the subject and introduction of verification and password-reset emails (`PUT …/projects/{id}/branding`). Users also receive branded security alerts when their password or sign-in methods change |
 | Roles and scopes | Application roles arrive in a flat `roles` claim. OAuth scopes are defined per environment (`…/scopes`), granted per application, and appear in the standard `scope` claim only when requested |
 | Secrets | Client secrets, API keys and webhook signing secrets are shown once at creation and never returned again. Rotating a client secret keeps the previous one valid for 24 hours (`previousSecretExpiresAt`) so you can redeploy without downtime; `?revokePrevious=true` or `DELETE …/secret/previous` ends that at once |
 | Errors | RFC 9457 Problem Details with a stable `code` field (e.g. `quota_exceeded`, `idempotency_key_reused`) |

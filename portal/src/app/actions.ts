@@ -121,6 +121,22 @@ export async function deleteProject(orgId: string, projectId: string, _: ActionS
   return result;
 }
 
+export async function updateBranding(orgId: string, projectId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  return run(async () => {
+    await api("PUT", orgPath(orgId, `/projects/${projectId}/branding`), {
+      body: {
+        logoUrl: optionalText(form, "logoUrl") ?? null,
+        primaryColor: form.get("useDefaultColor") === "on" ? null : optionalText(form, "primaryColor") ?? null,
+        emailVerificationSubject: optionalText(form, "emailVerificationSubject") ?? null,
+        emailVerificationIntro: optionalText(form, "emailVerificationIntro") ?? null,
+        passwordResetSubject: optionalText(form, "passwordResetSubject") ?? null,
+        passwordResetIntro: optionalText(form, "passwordResetIntro") ?? null,
+      },
+    });
+    return { message: "Branding saved and applied to every environment." };
+  });
+}
+
 // ---------------------------------------------------------------- Scopes
 
 type Env = { orgId: string; projectId: string; environmentId: string };

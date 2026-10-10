@@ -79,6 +79,7 @@ Status: **Verified** = mitigation implemented and covered by automated tests; **
 | T-01 | Direct modification of Keycloak configuration bypassing Dovepeak | TB2    | Admin API blocked on the public edge (ADR-0007); reconciliation worker reverts drift   | M2.4, M3.7  | Verified (edge: `EdgeProtectionTests`; realm settings, client policies (PKCE, grant restrictions, secret rotation), scopes, client configuration and token lifetimes reverted and audited: `ReconciliationTests`, `ScopeApiTests`) |
 | T-02 | CSRF against portal or BFF session cookies                     | TB1      | SameSite cookies, Origin checks on state-changing BFF routes                            | M1.2, M4.1  | Verified (BFF: `tests/e2e/bff-smoke.mjs`; portal: `portal/e2e` — SameSite/HttpOnly cookies, cross-site sign-out rejected, Referrer-Policy keeps the Origin check effective) |
 | T-03 | Webhook payload forgery received by tenant systems             | TB4      | HMAC-signed webhooks with timestamp to prevent replay                                   | M3.9        | Verified (`WebhookSignerTests`, `AuditAndWebhookApiTests`: `Dovepeak-Signature: t=…,v1=…`, 5-minute replay window) |
+| T-04 | Tenant branding abused for phishing, markup injection or email header injection | TB1, TB4 | HTTPS-only logo URLs, escaped text, single-line subjects, platform-controlled links, buttons and footer; values re-checked in templates; drift reverted | M4.3 | Verified (`TenantBrandingTests`, `BrandingApiTests`) |
 
 ### Repudiation
 

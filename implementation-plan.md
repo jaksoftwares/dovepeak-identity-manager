@@ -175,7 +175,7 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 
 - [x] ~~Keycloakify~~ theme using the Dovepeak brand guidelines. *(CSS-only child theme instead; Keycloakify re-evaluated in Phase 4 — ADR-0006.)*
 - [x] Login, registration, verification and recovery pages styled.
-- [ ] Prototype of per-tenant branding (logo and colours). *(Partial: per-tenant name only. Logo and colours are carried to M4.3 — ADR-0006, limitation L-07.)*
+- [x] Prototype of per-tenant branding (logo and colours). *(Delivered in M4.3 — ADR-0010.)*
 
 **Done when:** two realms display different branding from the same theme.
 
@@ -215,8 +215,8 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 **Depends on:** M2.1
 
 - [x] Configurable SMTP provider.
-- [ ] Templates for verification, recovery and security alerts. *(Partial: verification and recovery use Keycloak's templates. Branded templates and security alerts are carried to M4.3.)*
-- [ ] Per-tenant template overrides. *(Carried to M4.3 with per-tenant branding.)*
+- [x] Templates for verification, recovery and security alerts. *(Delivered in M4.3: branded templates and security alert emails — ADR-0010.)*
+- [x] Per-tenant template overrides. *(Delivered in M4.3.)*
 - [ ] Per-tenant sending quotas. *(Partial: per-IP limits on email-sending endpoints. Keycloak sends email itself, so per-account and per-tenant quotas need an SMTP relay or a Keycloak extension; carried to M6.4 — limitation L-04.)*
 
 **Done when:** each email type is delivered and rendered correctly for two different tenants.
@@ -404,9 +404,9 @@ M3.1 ─▶ M3.2 ─▶ M3.3 ─▶ M3.4 ─▶ M3.5 ─▶ M3.6 ─▶ M3.7 ─
 - [x] Application creation by type.
 - [x] Callback URLs, logout URLs and allowed origins.
 - [x] Authentication methods, token and session policies. *(Plus audiences and OAuth scopes.)*
-- [ ] Branding and hosted login page settings, including per-tenant logo and colours (carried from M1.5). *(Not started: needs per-tenant theme support in Keycloak.)*
-- [ ] Branded email templates, security alert emails and per-tenant template overrides (carried from M2.2).
-- [ ] Email template editor. *(Not started; depends on the branded templates above.)*
+- [x] Branding and hosted login page settings, including per-tenant logo and colours (carried from M1.5). *(Per project, all environments; reconciled — ADR-0010.)*
+- [x] Branded email templates, security alert emails and per-tenant template overrides (carried from M2.2).
+- [x] Email template editor. *(Subject and introduction of verification and password-reset emails, with live preview; links and footer stay platform-controlled.)*
 
 **Done when:** every application setting in the Management API can be changed from the portal.
 

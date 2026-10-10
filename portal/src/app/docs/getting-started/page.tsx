@@ -30,6 +30,9 @@ export default function GettingStarted() {
       <h2>6. Protect your API</h2>
       <p>Add your API&apos;s identifier as an <em>audience</em> on the application, then validate tokens in the API: see <a href="/docs/protect-an-api">Protect an API</a>.</p>
 
+      <h2>7. Brand your sign-in pages and emails</h2>
+      <p>On the project page, open <strong>Branding and emails</strong> to set your logo (HTTPS URL), brand colour, and the subject and introduction of the verification and password-reset emails. It applies to every environment at once. Links, buttons and the &quot;Secured by Dovepeak Identity&quot; footer are always added by the platform, so your users can trust every email. Users are also alerted by email when their password or sign-in methods change.</p>
+
       <h2>Token lifetimes</h2>
       <p>Access tokens last 10 minutes by default (5–60 configurable per application), sessions 30 minutes idle and 12 hours at most. Refresh tokens rotate on every use; reusing an old one ends the session.</p>
     </article>

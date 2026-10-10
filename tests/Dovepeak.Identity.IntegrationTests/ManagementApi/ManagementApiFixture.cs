@@ -56,6 +56,34 @@ public sealed class ManagementApiFixture : IAsyncLifetime
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<PlatformRealmInitializer>().EnsureAsync(CancellationToken.None);
+        await DeleteOrphanedRealmsAsync(scope.ServiceProvider);
+    }
+
+    /// <summary>
+    /// An aborted run (killed process, sleeping host) leaves tenant realms whose environments were already removed.
+    /// Hundreds of them slow Keycloak down past the measured per-cluster threshold, so each run starts by deleting
+    /// "dp-" realms that no environment owns. Realms of live environments are never touched.
+    /// </summary>
+    private static async Task DeleteOrphanedRealmsAsync(IServiceProvider services)
+    {
+        var db = services.GetRequiredService<Persistence.PlatformDbContext>();
+        db.TenantScope.EnterSystem();
+        var owned = (await db.Environments.Select(e => e.RealmName).ToListAsync()).ToHashSet(StringComparer.Ordinal);
+        var orphans = (await KeycloakAdmin.Client.ListRealmNamesAsync(CancellationToken.None))
+            .Where(r => r.StartsWith("dp-", StringComparison.Ordinal) && r != "dp-demo" && !owned.Contains(r))
+            .ToList();
+
+        // Best effort: Keycloak occasionally fails a concurrent realm deletion; anything left is retried next run.
+        await Parallel.ForEachAsync(orphans, new ParallelOptions { MaxDegreeOfParallelism = 4 }, async (realm, ct) =>
+        {
+            try
+            {
+                await KeycloakAdmin.Client.DeleteRealmAsync(RealmName.Parse(realm), ct);
+            }
+            catch (KeycloakAdminException)
+            {
+            }
+        });
     }
 
     /// <summary>

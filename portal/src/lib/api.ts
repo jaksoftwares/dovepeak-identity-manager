@@ -96,6 +96,11 @@ export interface ApplicationConfig {
   redirectUris: string[]; postLogoutRedirectUris: string[]; webOrigins: string[]; audiences: string[]; scopes: string[];
   accessTokenLifetimeSeconds: number; sessionIdleTimeoutSeconds?: number | null; sessionMaxLifetimeSeconds?: number | null;
 }
+export interface Branding {
+  logoUrl?: string | null; primaryColor?: string | null;
+  emailVerificationSubject?: string | null; emailVerificationIntro?: string | null;
+  passwordResetSubject?: string | null; passwordResetIntro?: string | null;
+}
 export interface Scope { name: string; description?: string | null; createdAt: string }
 export interface Role { name: string; description?: string | null; createdAt: string }
 export interface EndUser { id: string; email?: string | null; emailVerified: boolean; enabled: boolean; createdAt: string }

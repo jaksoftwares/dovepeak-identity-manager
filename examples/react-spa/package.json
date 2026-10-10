@@ -13,7 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@dovepeak/identity": "0.1.0",
+    "@dovepeak/identity": "0.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

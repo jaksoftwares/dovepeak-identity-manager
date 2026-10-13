@@ -31,7 +31,7 @@ export async function createOrganization(_: ActionState, form: FormData): Promis
   let created: Organization | undefined;
   const result = await run(async () => {
     created = await api<Organization>("POST", "/v1/organizations", {
-      body: { slug: text(form, "slug"), name: text(form, "name") },
+      body: { name: text(form, "name"), slug: optionalText(form, "slug") }, // without a slug the API derives one from the name
       idempotent: true,
     });
   });
@@ -98,7 +98,7 @@ export async function createProject(orgId: string, _: ActionState, form: FormDat
   let created: Project | undefined;
   const result = await run(async () => {
     created = await api<Project>("POST", orgPath(orgId, "/projects"), {
-      body: { slug: text(form, "slug"), name: text(form, "name") },
+      body: { name: text(form, "name"), slug: optionalText(form, "slug") }, // without a slug the API derives one from the name
       idempotent: true,
     });
   });

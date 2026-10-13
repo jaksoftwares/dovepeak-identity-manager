@@ -20,6 +20,7 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 | [Threat model](docs/security/threat-model.md)                  | STRIDE threat model and mitigation status       |
 | [Known limitations](docs/security/known-limitations.md)        | Security limitations, stated openly             |
 | [Running the application](docs/running-the-application.md)     | Every command to run the full stack, examples and tests |
+| [Integration guide](docs/integration-guide.md)                 | Add sign-in to your app: where user data lives, which credential goes where, every stack, APIs, branding, API keys, webhooks |
 | [Self-hosting guide](docs/self-hosting.md)                     | Production deployment on a Linux server         |
 | [Supported flows](docs/supported-flows.md)                     | Flows, defaults and what is deliberately rejected |
 | [Service-level objectives](docs/operations/service-level-objectives.md) | Availability, latency, RPO and RTO targets |
@@ -48,6 +49,113 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 
 The production deployment (`deploy/production`) adds Caddy for TLS, a two-node Keycloak cluster and pgBackRest backups; see the [self-hosting guide](docs/self-hosting.md).
 
+## How It Works: Every Container Explained
+
+`docker compose up` starts the whole platform as a set of containers. Each one has a single job. This section explains what every container does, why it is there, the order the containers start in, and how a request travels through them.
+
+### The big picture in one paragraph
+
+**Keycloak** is the identity engine: it stores users, checks passwords, shows the hosted login pages and issues tokens. Dovepeak never lets the internet talk to Keycloak directly. Public traffic goes through **the edge** (Traefik), which applies rate limits and blocks administrative paths. Developers never configure Keycloak by hand either. They use the **developer portal**, which calls the **Management API**, which stores the desired configuration in **PostgreSQL** and applies it to Keycloak. **Workers** run in the background: they finish slow provisioning work, deliver webhooks, collect audit events and undo any change made to Keycloak outside Dovepeak. **Valkey** holds fast, short-lived data: rate-limit counters, portal sessions and email quotas. All email leaves through the **mail relay**, which enforces sending quotas before handing the message to an email provider (**Mailpit** locally).
+
+### Core containers (always started)
+
+| Container | Image | Host port | What it does |
+| --------- | ----- | --------- | ------------ |
+| `postgres` | `postgres:17.11-alpine` | `5442` | **The database.** Holds two separate databases with their own least-privilege users, created on first start by `deploy/local/postgres/init/01-create-databases.sh`. `dovepeak` stores the platform's own data: organizations, members, projects, environments, applications, API keys, webhooks, the outbox and audit events. Tenant-owned tables are protected by forced PostgreSQL Row-Level Security, so one organization can never read another's rows. `keycloak` stores Keycloak's data: realms, users, password hashes, sessions and signing keys. |
+| `valkey` | `valkey/valkey:8.1-alpine` | `6379` | **The fast in-memory store** (an open-source, Redis-compatible fork). Holds data that is short-lived or needs very fast updates. It stores three kinds of data: the edge's per-IP rate-limit counters, the developer portal's server-side sessions (database 2), and the mail relay's per-recipient and per-tenant email counters. It requires a password and saves to disk (`appendonly`), so it survives restarts. |
+| `keycloak` | `quay.io/keycloak/keycloak:26.7.5` | `8081` (admin, local only), `9000` (health and metrics) | **The identity engine.** Every tenant environment (development, staging, production of each project) is its own isolated Keycloak *realm*, with its own users, keys and settings. Keycloak serves the hosted login, registration, password-reset and email-verification pages (with the Dovepeak theme from `identity/keycloak/themes`). It runs the OpenID Connect and OAuth 2.0 endpoints that apps use to get tokens, and it signs those tokens. Its public address is `http://localhost:8080` (through the edge). The admin console on `8081` is bound to your machine only and is never exposed publicly. |
+| `keycloak-bootstrap` | `quay.io/keycloak/keycloak:26.7.5` | none | **One-shot setup job; runs once and exits.** Waits for Keycloak to be healthy, then runs `identity/keycloak/bootstrap/bootstrap.sh`. The script creates the `dovepeak-management` service account, which the Management API and workers use to talk to Keycloak. That account gets only the permissions it needs, not full admin rights. The Management API and workers wait until this job has finished successfully. A status of `Exited (0)` is expected. |
+| `edge` | `traefik:v3.5.3` | `8080` | **The public front door to Keycloak.** Everything a browser or app sends to the identity endpoint passes through here (routes in `deploy/local/traefik/dynamic.yml`). It returns **403** for `/admin`, the `master` realm, `/metrics` and `/health`, so attackers cannot reach administrative surfaces. It applies three tiers of **per-IP rate limits**, counted in Valkey: very strict on endpoints that send email (registration, password reset), strict on endpoints that check credentials (login, token, logout), and generous for everything else. It adds security headers. Its access logs drop the URL path, because email links carry one-time tokens in the query string. |
+| `mailpit` | `axllent/mailpit:v1.27` | `8025` (web UI), `1025` (SMTP) | **A fake email inbox for local development.** It catches every email the platform sends (verification links, password resets, security alerts, invitations) and shows them at http://localhost:8025. Nothing reaches real mailboxes. In production it is replaced by a real SMTP provider. |
+| `mail-relay` | built from `services/mail-relay` | none | **The gatekeeper for outgoing email.** Every Keycloak realm sends its email here instead of directly to the provider. Each realm signs in with its realm name, so the relay knows which tenant is sending. The relay enforces **sending quotas**: by default 5 emails per recipient per hour, 20 per day, and 500 per tenant per hour. This prevents anyone from using "forgot password" to flood someone's inbox or burn the email budget. It counts in Valkey, forwards allowed messages to the upstream provider (Mailpit locally) and records delivery metrics. |
+| `db-migrate` | built from `services/management-api/.../Dockerfile.migrations` | none | **One-shot setup job; runs once and exits.** Applies the Entity Framework Core database migrations to the `dovepeak` database, so the schema always matches the code. The Management API and workers start only after it finishes successfully. A status of `Exited (0)` is expected. |
+| `management-api` | built from `services/management-api` | `5080` | **The brain of the platform** (ASP.NET Core, `/v1` REST API, OpenAPI at `/openapi/v1.json`). Everything a developer can configure goes through it: organizations, members and invitations, API keys, projects and their three environments, applications (SPA, native, web, machine), roles, scopes, branding, token lifetimes, webhooks, end users and sessions. It authenticates developers with tokens from the `dovepeak-platform` realm or with organization API keys. It checks organization roles (viewer ⊂ developer ⊂ admin ⊂ owner), saves the desired state in PostgreSQL and applies it to Keycloak with the bootstrap service account. Work that takes time, such as creating a realm, is written to the *outbox* and finished by the workers. |
+| `workers` | built from `services/workers` | none | **The background jobs.** Four jobs run on intervals. The **outbox job** completes queued work such as provisioning a new environment's realm, retrying safely if interrupted. The **webhook job** delivers signed (HMAC-SHA256) event notifications to customers' HTTPS endpoints, with retries and exponential backoff. The **reconciliation job** compares every environment in Keycloak with its stored configuration and reverts changes made directly in Keycloak (*drift*), emitting a `drift.corrected` event. The **audit collection job** pulls login and admin events from Keycloak into the platform's audit log and deletes events older than the retention period. |
+| `portal` | built from `portal` (Next.js) | `3100` | **The developer portal: the website developers use.** Sign up, create organizations, projects and applications, copy integration details, manage API keys, webhooks, branding and team members, and read the built-in docs at `/docs`. It is a *backend-for-frontend*: you sign in through Keycloak's `dovepeak-platform` realm, but the tokens stay on the portal server and in Valkey. The browser only holds an `HttpOnly` session cookie. Every action the portal takes is a call to the Management API. |
+
+### One-shot jobs versus long-running services
+
+`keycloak-bootstrap` and `db-migrate` are meant to stop. After a successful start, `docker compose ps -a` shows them as `Exited (0)`, and every other container as `running (healthy)`. If either job exits with a non-zero code, the services that depend on it do not start; check it with `docker compose logs db-migrate` or `docker compose logs keycloak-bootstrap`.
+
+### Start-up order
+
+Containers start in dependency order, and each step waits for the previous one to be *healthy* (or, for one-shot jobs, *completed successfully*):
+
+```text
+1. postgres, valkey, mailpit                     (no dependencies)
+2. keycloak            ← postgres healthy
+   db-migrate          ← postgres healthy          (runs, then exits)
+   mail-relay          ← valkey healthy
+3. keycloak-bootstrap  ← keycloak healthy          (runs, then exits)
+   edge                ← keycloak + valkey healthy
+4. management-api      ← postgres, valkey, mail-relay healthy; db-migrate and keycloak-bootstrap completed
+   workers             ← db-migrate and keycloak-bootstrap completed
+5. portal              ← management-api + valkey healthy
+```
+
+`docker compose up -d --wait` returns only when the whole chain is healthy.
+
+### Observability containers (optional: `--profile observability`)
+
+| Container | Image | Host port | What it does |
+| --------- | ----- | --------- | ------------ |
+| `otel-collector` | `otel/opentelemetry-collector-contrib` | none | **The telemetry hub.** The Management API, workers, mail relay, portal and Keycloak send traces and metrics here over OpenTelemetry (gRPC `4317`, HTTP `4318`). It removes sensitive attributes and query strings, then forwards traces to Tempo and exposes metrics to Prometheus. |
+| `tempo` | `grafana/tempo` | none | **Trace storage.** Keeps distributed traces, so you can follow one request from the portal through the Management API into Keycloak and the database. |
+| `prometheus` | `prom/prometheus` | `9090` | **Metrics storage and alert rules.** Scrapes Keycloak, the edge, the collector and the blackbox exporter, and evaluates the SLO and alert rules in `deploy/observability/prometheus/rules`. Keeps 30 days. |
+| `blackbox` | `prom/blackbox-exporter` | none | **External health prober.** Checks the readiness endpoints from the outside, the way a user would, so an outage is detected even if a service cannot report on itself. |
+| `alertmanager` | `prom/alertmanager` | `9093` | **Alert routing.** Receives firing alerts from Prometheus, groups them and sends notifications to the receivers configured in `deploy/observability/alertmanager.yml` (email, Slack, PagerDuty). |
+| `grafana` | `grafana/grafana` | `3001` | **Dashboards.** Comes with the pre-provisioned *Dovepeak Identity — Overview* dashboard (`deploy/observability/grafana`). It shows SLO status (availability, sign-in latency, email hand-off), sign-ins and failed sign-ins per realm, edge responses and rate-limited requests, Management API latency, email outcomes and throttling, outbox, webhooks and drift corrections, and links to traces. Prometheus and Tempo are its data sources. |
+
+### What production adds (`deploy/production`)
+
+| Container | What it does |
+| --------- | ------------ |
+| `caddy` | **The only container open to the internet** (ports 80 and 443). It obtains and renews HTTPS certificates automatically (Let's Encrypt) and routes the three public hostnames: the identity host goes to the edge, the console host to the portal, and the API host to the Management API. |
+| `keycloak-1`, `keycloak-2` | **Two Keycloak nodes in one cluster** (replacing the single `keycloak`). They share sessions, so if one node crashes, users stay signed in and tokens keep working. They are built from a production Keycloak image (`deploy/production/keycloak`). |
+| `pg-backup` | **Encrypted backups with pgBackRest.** PostgreSQL continuously archives its write-ahead log; this container schedules full backups (weekly by default) and differential backups (daily). That allows point-in-time restore to any moment, to local disk or an S3-compatible bucket. |
+| (no `mailpit`) | The mail relay forwards to your real SMTP provider (`SMTP_*` settings). |
+
+The observability containers always run in production. In production, only Caddy publishes public ports; Grafana, Prometheus, Alertmanager and the Keycloak admin console bind to `127.0.0.1` and are reached through an SSH tunnel.
+
+### How a request travels through the system
+
+**An end user signs in to your app:**
+
+```text
+Browser ─▶ edge (rate limit, block /admin) ─▶ Keycloak (realm of that environment)
+        ◀─ hosted login page; user enters password; Keycloak checks it against the hash in PostgreSQL
+        ◀─ redirect back to the app with a one-time code
+App server ─▶ edge ─▶ Keycloak: exchanges the code (+ PKCE verifier) for signed tokens
+App API checks the token signature against the realm's public keys (JWKS) — no call to Dovepeak needed
+```
+
+**A developer creates a project in the portal:**
+
+```text
+Browser ─▶ portal (session cookie; token kept server-side in Valkey)
+portal ─▶ Management API: POST /v1/organizations/{id}/projects
+Management API: checks the developer's role ─▶ saves project + 3 environments in PostgreSQL ─▶ writes outbox items
+workers (outbox job) ─▶ Keycloak: creates one realm per environment from the realm template
+workers (reconciliation job, continuously) ─▶ keeps every realm matching what PostgreSQL says
+```
+
+**A user asks for a password reset:**
+
+```text
+Browser ─▶ edge (strictest "email" rate limit) ─▶ Keycloak ─SMTP─▶ mail-relay
+mail-relay: under quota for this recipient and tenant? ─▶ Mailpit (local) or SMTP provider (production)
+```
+
+### Where data lives (Docker volumes)
+
+| Volume | Contents | Lost on `docker compose down -v` |
+| ------ | -------- | -------------------------------- |
+| `postgres-data` | Both databases: all platform and Keycloak data | Yes |
+| `valkey-data` | Sessions, rate-limit and quota counters | Yes |
+| `prometheus-data`, `tempo-data`, `grafana-data` | Metrics, traces, Grafana state (observability profile) | Yes |
+
+`docker compose down` keeps all volumes. `docker compose down -v` deletes them and gives you a completely fresh platform.
+
 ## Repository Layout
 
 ```text
@@ -72,6 +180,8 @@ The production deployment (`deploy/production`) adds Caddy for TLS, a two-node K
 ---
 
 ## Getting Started
+
+This is the quick path. For every command — the example apps, the production stack, rehearsing production locally, all test suites and troubleshooting — see [Running the application](docs/running-the-application.md).
 
 ### Prerequisites
 
@@ -116,6 +226,8 @@ All ports are bound to `127.0.0.1` and are not reachable from your network.
 ### 4. Open the developer portal
 
 Go to http://localhost:3100, choose **Create an account**, and confirm the email in Mailpit (http://localhost:8025). Then create an organization, a project and an application; the **Integration** tab shows everything your app needs.
+
+To connect your own application — which credentials go where, where your users' data lives, and code for Next.js, single-page apps, mobile, machine-to-machine and APIs — follow the [integration guide](docs/integration-guide.md).
 
 ### 5. Try a real sign-in in an example app
 

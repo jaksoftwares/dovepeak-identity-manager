@@ -1,5 +1,6 @@
 import { deleteApplication, updateApplication } from "@/app/actions";
 import { ActionForm } from "@/components/forms";
+import { PageGuide } from "@/components/help";
 import { Card } from "@/components/ui";
 import { envPath, get, type ApplicationConfig, type Scope } from "@/lib/api";
 import { can } from "@/lib/load";
@@ -20,6 +21,17 @@ export default async function ApplicationSettings({ params }: { params: AppParam
   return (
     <>
       {header}
+      <PageGuide id="application-settings" title="What you can change here">
+        <p>
+          These settings decide where users may be sent during sign-in and what this application&apos;s tokens contain.
+          Changes apply within seconds; you don&apos;t need to redeploy your app unless you change a URL it uses.
+        </p>
+        <p className="small">
+          Next steps: copy the settings into your code from the <strong>Integration</strong> tab
+          {application.kind === "web" || application.kind === "machine" ? <>, keep the client secret safe (<strong>Credentials</strong> tab)</> : null}
+          , and give users roles on the <strong>Roles</strong> tab if your app needs them.
+        </p>
+      </PageGuide>
       <Card title="Settings">
         <ActionForm action={updateApplication.bind(null, ids, application.id)} submitLabel="Save settings" resetOnSuccess={false}>
           <input type="hidden" name="kind" value={application.kind} />
@@ -27,14 +39,14 @@ export default async function ApplicationSettings({ params }: { params: AppParam
             <label>Name<input name="name" defaultValue={application.name} required maxLength={200} /></label>
             {interactive && (
               <>
-                <label>Callback URLs <span className="hint">One per line; exact match, no wildcards.</span>
+                <label>Callback URLs <span className="hint">Where users return after signing in. One per line; exact match, no wildcards. A mismatch shows &ldquo;Invalid redirect_uri&rdquo; on the sign-in page.</span>
                   <textarea name="redirectUris" defaultValue={application.redirectUris.join("\n")} />
                 </label>
-                <label>Logout URLs<textarea name="postLogoutRedirectUris" defaultValue={application.postLogoutRedirectUris.join("\n")} /></label>
-                <label>Allowed origins (CORS)<textarea name="webOrigins" defaultValue={application.webOrigins.join("\n")} /></label>
+                <label>Logout URLs <span className="hint">Pages users may land on after signing out.</span><textarea name="postLogoutRedirectUris" defaultValue={application.postLogoutRedirectUris.join("\n")} /></label>
+                <label>Allowed origins (CORS) <span className="hint">Single-page apps: the address the app is served from.</span><textarea name="webOrigins" defaultValue={application.webOrigins.join("\n")} /></label>
               </>
             )}
-            <label>API audiences<textarea name="audiences" defaultValue={application.audiences.join("\n")} /></label>
+            <label>API audiences <span className="hint">Your APIs this app calls, such as orders-api. Each API accepts only tokens carrying its own identifier.</span><textarea name="audiences" defaultValue={application.audiences.join("\n")} /></label>
             <fieldset>
               <legend>Scopes this app may request</legend>
               {scopes.length === 0 ? <span className="muted small">No scopes are defined in this environment.</span> : (
@@ -47,17 +59,20 @@ export default async function ApplicationSettings({ params }: { params: AppParam
             </fieldset>
             <fieldset>
               <legend>Token and session policy</legend>
-              <p className="small muted">Leave empty to use the environment baseline (shown as the placeholder).</p>
+              <p className="small muted">
+                How long tokens and sessions last. Leave a field empty to use the default shown in grey. Shorter access tokens
+                mean revoked users lose access sooner; the session limits decide when users must sign in again.
+              </p>
               <div className="grid cols-3">
-                <label>Access token lifetime (s) <span className="hint">300–3600</span>
+                <label>Access token lifetime (s) <span className="hint">300–3600. How long one token is accepted by your APIs.</span>
                   <input name="accessTokenLifetimeSeconds" type="number" min={300} max={3600} defaultValue={policy.accessTokenLifetimeSeconds ?? ""} placeholder={String(config.accessTokenLifetimeSeconds)} />
                 </label>
                 {interactive && (
                   <>
-                    <label>Session idle timeout (s) <span className="hint">300–1800</span>
+                    <label>Session idle timeout (s) <span className="hint">300–1800. Sign-out after this long without activity.</span>
                       <input name="sessionIdleTimeoutSeconds" type="number" min={300} max={1800} defaultValue={policy.sessionIdleTimeoutSeconds ?? ""} placeholder="1800" />
                     </label>
-                    <label>Session maximum (s) <span className="hint">300–43200</span>
+                    <label>Session maximum (s) <span className="hint">300–43200. Sign-out after this long regardless of activity.</span>
                       <input name="sessionMaxLifetimeSeconds" type="number" min={300} max={43200} defaultValue={policy.sessionMaxLifetimeSeconds ?? ""} placeholder="43200" />
                     </label>
                   </>

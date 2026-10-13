@@ -116,10 +116,49 @@ button.link { background: none; color: var(--dp-orange-text); padding: 0; border
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 
+/* In-app guidance */
+.guide { background: #fff7f1; border: 1px solid #ffd9bf; border-radius: var(--radius); margin-bottom: 20px; }
+.guide > summary { cursor: pointer; padding: 10px 16px; font-weight: 600; color: var(--dp-orange-text); list-style: none; }
+.guide > summary::-webkit-details-marker { display: none; }
+.guide > summary::before { content: "?"; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 8px; border-radius: 50%; background: var(--dp-orange); color: #fff; font-size: 12px; }
+.guide > summary::after { content: "Hide"; float: right; font-weight: 400; font-size: 13px; color: var(--muted); }
+.guide:not([open]) > summary::after { content: "Show"; }
+.guide-body { padding: 0 16px 14px 42px; font-size: 14px; }
+.guide-body p:last-child, .guide-body ul:last-child { margin-bottom: 0; }
+.guide-body ul { margin: 0 0 12px; padding-left: 18px; }
+.guide-body li { margin-bottom: 4px; }
+
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.checklist li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; opacity: .85; }
+.checklist .marker { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border); font-size: 13px; font-weight: 600; color: var(--muted); }
+.checklist li.done { opacity: .6; }
+.checklist li.done .marker { background: var(--success-bg); border-color: #abefc6; color: var(--success); }
+.checklist li.next { opacity: 1; }
+.checklist li.next .marker { background: var(--dp-orange); border-color: var(--dp-orange); color: #fff; }
+
+.explain { display: grid; gap: 8px; margin: 0 0 12px; }
+.explain div { display: grid; grid-template-columns: 190px 1fr; gap: 12px; }
+.explain dt { font-weight: 600; font-size: 13px; }
+.explain dd { margin: 0; font-size: 13px; color: var(--muted); }
+
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.choice { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; border: 1px solid #c9c9dc; border-radius: 8px; padding: 10px 12px; font-weight: 400; cursor: pointer; }
+.choice:has(input:checked) { border-color: var(--dp-orange); background: #fff7f1; }
+.choice input { margin-top: 3px; }
+.choice strong { font-size: 14px; }
+.choice .small { grid-column: 2; }
+
+details.advanced > summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+details.advanced[open] > summary { margin-bottom: 10px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 /* Public pages */
 .hero { max-width: 720px; margin: 72px auto; padding: 0 24px; text-align: center; }
 .hero h1 { font-size: 34px; margin-bottom: 12px; }
 .hero p { color: var(--muted); font-size: 17px; }
+.hero .how { list-style: none; padding: 0; margin: 48px 0 0; text-align: left; }
+.hero .how .card { margin: 0; }
+.hero .how p { font-size: 13px; margin: 6px 0 0; }
 .docs { max-width: 860px; }
 .docs h2 { margin-top: 28px; }
 .docs li { margin-bottom: 6px; }
@@ -127,6 +166,7 @@ button.link { background: none; color: var(--dp-orange-text); padding: 0; border
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
-  .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+  .grid.cols-2, .grid.cols-3, .grid.cols-4, .choices { grid-template-columns: 1fr; }
+  .explain div { grid-template-columns: 1fr; gap: 2px; }
   .main { padding: 20px 16px; }
 }

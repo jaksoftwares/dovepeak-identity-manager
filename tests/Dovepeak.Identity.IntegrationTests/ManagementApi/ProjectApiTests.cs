@@ -81,6 +81,20 @@ public sealed class ProjectApiTests(ManagementApiFixture api)
     }
 
     [Fact]
+    public async Task ProjectWithoutSlug_GetsOneFromItsName_MadeUnique()
+    {
+        // The scenario's project already uses the slug "shop".
+        var scenario = await Scenario.CreateAsync(api);
+
+        var second = (await scenario.Owner.PostAsync($"{scenario.Org}/projects", new { name = "Shop" })).Expect(HttpStatusCode.Created).Json;
+        var third = (await scenario.Owner.PostAsync($"{scenario.Org}/projects", new { name = "Mobile App!" })).Expect(HttpStatusCode.Created).Json;
+
+        Assert.Equal("shop-2", second["slug"]!.GetValue<string>());
+        Assert.Equal("mobile-app", third["slug"]!.GetValue<string>());
+        await api.ProcessOutboxAsync();
+    }
+
+    [Fact]
     public async Task EnvironmentMapping_IsStoredWithCluster()
     {
         var scenario = await Scenario.CreateAsync(api);

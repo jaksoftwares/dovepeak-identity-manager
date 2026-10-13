@@ -1,5 +1,6 @@
 import { changeMemberRole, inviteMember, removeMember, revokeInvitation } from "@/app/actions";
 import { ActionForm } from "@/components/forms";
+import { PageGuide } from "@/components/help";
 import { Card, Empty, PageHeader, When } from "@/components/ui";
 import { get, orgPath, type Invitation, type Member, type Organization } from "@/lib/api";
 import { can, load } from "@/lib/load";
@@ -30,6 +31,18 @@ export default async function Members({ params }: { params: Promise<{ orgId: str
   return (
     <>
       <PageHeader title="Members" subtitle="Roles nest: viewer, developer, admin, owner. Only owners can grant the owner role." />
+      <PageGuide id="members" title="Who can do what">
+        <p>Members are your colleagues who use this portal. They are not the end users of your apps. Each role includes everything the role before it can do:</p>
+        <table className="small">
+          <thead><tr><th>Role</th><th>Can</th></tr></thead>
+          <tbody>
+            <tr><td><strong>viewer</strong></td><td>See projects, applications and members. Change nothing.</td></tr>
+            <tr><td><strong>developer</strong></td><td>Create projects and applications, rotate client secrets, manage roles, scopes and end-user sessions.</td></tr>
+            <tr><td><strong>admin</strong></td><td>Invite and remove members, delete projects, manage API keys and webhooks, read the audit log.</td></tr>
+            <tr><td><strong>owner</strong></td><td>Rename or delete the organization and appoint other owners.</td></tr>
+          </tbody>
+        </table>
+      </PageGuide>
       <Card>
         <table>
           <thead><tr><th>Email</th><th>Role</th><th>Joined</th>{manage && <th />}</tr></thead>
@@ -74,7 +87,10 @@ export default async function Members({ params }: { params: Promise<{ orgId: str
             )}
           </Card>
           <Card title="Invite a member">
-            <p className="muted small">They accept the invitation after signing in to the portal with this email address.</p>
+            <p className="muted small">
+              Your colleague creates a portal account (or signs in) with this exact email address. The invitation then appears
+              on their organizations page for them to accept. It expires after 7 days.
+            </p>
             <ActionForm action={inviteMember.bind(null, orgId)} submitLabel="Send invitation" className="inline">
               <label>Email<input name="email" type="email" required placeholder="colleague@example.com" /></label>
               <label>Role<RoleSelect /></label>

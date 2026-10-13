@@ -29,11 +29,12 @@ public sealed class OrganizationService(
 
     // ---------------------------------------------------------------- Organizations
 
-    public async Task<OrganizationView> CreateAsync(string slug, string name, CancellationToken ct)
+    /// <summary>Creates an organization owned by the caller. Without a slug, one is derived from the name.</summary>
+    public async Task<OrganizationView> CreateAsync(string? slug, string name, CancellationToken ct)
     {
         Caller.RequireDeveloper();
-        slug = Slug.Validate(slug, nameof(slug));
         name = Slug.ValidateName(name, nameof(name));
+        slug = string.IsNullOrWhiteSpace(slug) ? null : Slug.Validate(slug, nameof(slug));
         var now = timeProvider.GetUtcNow();
 
         db.TenantScope.EnterSystem();
@@ -46,7 +47,11 @@ public sealed class OrganizationService(
                 throw PlatformException.Quota("organizations", limit);
             }
 
-            if (await db.Organizations.AnyAsync(o => o.Slug == slug, ct))
+            if (slug is null)
+            {
+                slug = await Slug.FirstAvailableAsync(name, "organization", s => db.Organizations.AnyAsync(o => o.Slug == s, ct));
+            }
+            else if (await db.Organizations.AnyAsync(o => o.Slug == slug, ct))
             {
                 throw PlatformException.Conflict("slug_taken", "An organization with this slug already exists.");
             }

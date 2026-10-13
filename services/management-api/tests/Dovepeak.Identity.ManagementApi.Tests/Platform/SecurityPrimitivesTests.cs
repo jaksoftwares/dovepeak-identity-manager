@@ -159,4 +159,43 @@ public sealed class SlugTests
     [InlineData("1acme")]
     [InlineData("acme shop")]
     public void InvalidSlugs_AreRejected(string slug) => Assert.Throws<PlatformException>(() => Slug.Validate(slug, "slug"));
+
+    [Theory]
+    [InlineData("Acme Inc.", "acme-inc")]
+    [InlineData("  Online   Shop!! ", "online-shop")]
+    [InlineData("Café Rouge — Ltd", "cafe-rouge-ltd")]
+    [InlineData("2024 Launch", "project-2024-launch")]
+    [InlineData("X", "project")]
+    [InlineData("日本語", "project")]
+    public void FromName_DerivesAValidSlug(string name, string expected)
+    {
+        var slug = Slug.FromName(name, "project");
+        Assert.Equal(expected, slug);
+        Assert.Equal(slug, Slug.Validate(slug, "slug"));
+    }
+
+    [Fact]
+    public void FromName_TruncatesLongNamesToAValidSlug()
+    {
+        var slug = Slug.FromName(string.Join(' ', Enumerable.Repeat("word", 40)), "project");
+        Assert.True(slug.Length <= 63);
+        Assert.Equal(slug, Slug.Validate(slug, "slug"));
+    }
+
+    [Fact]
+    public async Task FirstAvailable_NumbersCollisions()
+    {
+        var taken = new HashSet<string> { "shop", "shop-2" };
+        Assert.Equal("shop-3", await Slug.FirstAvailableAsync("Shop", "project", s => Task.FromResult(taken.Contains(s))));
+    }
+
+    [Fact]
+    public async Task FirstAvailable_FallsBackToARandomSuffix()
+    {
+        var name = string.Join(' ', Enumerable.Repeat("word", 40));
+        var slug = await Slug.FirstAvailableAsync(name, "project", _ => Task.FromResult(true));
+        Assert.Matches("-[0-9a-f]{6}$", slug);
+        Assert.True(slug.Length <= 63);
+        Assert.Equal(slug, Slug.Validate(slug, "slug"));
+    }
 }

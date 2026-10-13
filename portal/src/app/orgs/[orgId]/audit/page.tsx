@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageGuide } from "@/components/help";
 import { Card, Empty, PageHeader, When } from "@/components/ui";
 import { orgPath, type AuditPage, type Organization } from "@/lib/api";
 import { attempt, can, load } from "@/lib/load";
@@ -43,6 +44,15 @@ export default async function Audit({
   return (
     <>
       <PageHeader title="Audit log" subtitle="Append-only. Management changes and end-user authentication events for this organization." />
+      <PageGuide id="audit" title="Reading the audit log">
+        <p>Every event is recorded here and kept for 365 days. Nobody can edit or delete entries. Three sources:</p>
+        <ul>
+          <li><strong>Management</strong>: changes made by your team in this portal or by API keys, such as <code>application.created</code>.</li>
+          <li><strong>Authentication</strong>: what your end users do, such as <code>REGISTER</code>, <code>LOGIN</code>, <code>LOGIN_ERROR</code> (wrong password), <code>VERIFY_EMAIL</code> and <code>RESET_PASSWORD</code>. Appears within about 15 seconds.</li>
+          <li><strong>Identity engine administration</strong>: low-level changes Dovepeak itself makes to the engine while applying your settings.</li>
+        </ul>
+        <p className="small">Investigating a user? Filter by <code>LOGIN_ERROR</code> to see failed attempts, then end their sessions under the environment&apos;s users page if needed.</p>
+      </PageGuide>
       <Card>
         <form className="inline" method="get" style={{ marginBottom: 16 }}>
           <label>Source

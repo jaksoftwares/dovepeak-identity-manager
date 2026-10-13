@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { revokePreviousSecret, rotateSecret } from "@/app/actions";
 import { ActionForm } from "@/components/forms";
+import { PageGuide } from "@/components/help";
 import { Card } from "@/components/ui";
 import { can } from "@/lib/load";
 import { applicationContext, type AppParams } from "../app";
@@ -15,6 +16,20 @@ export default async function Credentials({ params }: { params: AppParams }) {
   return (
     <>
       {header}
+      <PageGuide id="credentials" title="The client secret: your app's password">
+        <p>
+          The client secret proves to Dovepeak that a request really comes from your server. Treat it like a password:
+        </p>
+        <ul>
+          <li>Keep it on the server only, in an environment variable or secret manager. Never in browser code, mobile apps or Git.</li>
+          <li>It was shown once, when the application was created. Dovepeak cannot show it again.</li>
+          <li>
+            <strong>Changing it without downtime:</strong> issue a new secret, deploy it, then revoke the previous one. Both keep
+            working for 24 hours in between.
+          </li>
+          <li><strong>If it leaked:</strong> issue a new one with &ldquo;stop accepting the current secret immediately&rdquo; ticked.</li>
+        </ul>
+      </PageGuide>
       <Card title="Client secret">
         <p>
           Secrets are shown once, when they are issued. Dovepeak never stores them in readable form, so they cannot be

@@ -5,6 +5,13 @@ import { load } from "@/lib/load";
 export type AppParams = Promise<{ orgId: string; projectId: string; environmentId: string; applicationId: string }>;
 export type AppSection = "settings" | "credentials" | "roles" | "integration";
 
+const KIND_LABEL: Record<Application["kind"], string> = {
+  web: "Server-side web app",
+  spa: "Single-page app",
+  native: "Mobile or desktop app",
+  machine: "Machine-to-machine service",
+};
+
 /** Loads an application with its context and renders the shared header and tabs. */
 export async function applicationContext(params: AppParams, section: AppSection) {
   const { orgId, projectId, environmentId, applicationId } = await params;
@@ -30,7 +37,7 @@ export async function applicationContext(params: AppParams, section: AppSection)
     <>
       <PageHeader
         title={application.name}
-        subtitle={<>{application.kind} application · client ID <code data-testid="client-id">{application.clientId}</code></>}
+        subtitle={<>{KIND_LABEL[application.kind]} · client ID <code data-testid="client-id">{application.clientId}</code></>}
         crumbs={[
           { href: `/orgs/${orgId}/projects/${projectId}`, label: project.name },
           { href: envBase, label: environment.kind },

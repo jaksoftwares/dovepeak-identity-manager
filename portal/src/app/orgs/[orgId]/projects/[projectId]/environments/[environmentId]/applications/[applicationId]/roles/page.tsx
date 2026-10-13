@@ -1,5 +1,6 @@
 import { assignRole, createRole, deleteRole } from "@/app/actions";
 import { ActionForm } from "@/components/forms";
+import { PageGuide } from "@/components/help";
 import { Card, Empty, When } from "@/components/ui";
 import { envPath, get, type Role } from "@/lib/api";
 import { can } from "@/lib/load";
@@ -15,9 +16,20 @@ export default async function Roles({ params }: { params: AppParams }) {
   return (
     <>
       {header}
+      <PageGuide id="roles" title="Roles: what each user may do in this app">
+        <p>
+          Roles group your users by what they may do, for example <code>administrator</code>, <code>editor</code> or{" "}
+          <code>support</code>. You decide what each role means in your own code.
+        </p>
+        <ol>
+          <li>Create the role here.</li>
+          <li>Assign it to a user. Their user ID is on the environment&apos;s users page.</li>
+          <li>From their next sign-in or token refresh, the user&apos;s tokens list it in the <code>roles</code> claim.</li>
+          <li>Check it in your code, for example <code>RequireDovepeakRole(&quot;administrator&quot;)</code> in .NET or <code>requirePermissions(token, {"{ roles: [\"administrator\"] }"})</code> in Node.js.</li>
+        </ol>
+      </PageGuide>
       <Card>
-        <p className="muted small">Assigned roles appear in the user&apos;s access tokens for this application as a flat <code>roles</code> claim.</p>
-        {roles.length === 0 ? <Empty>No roles defined.</Empty> : (
+        {roles.length === 0 ? <Empty>No roles defined. Most apps start with none and add an administrator role when they need one.</Empty> : (
           <table>
             <thead><tr><th>Role</th><th>Description</th><th>Created</th>{write && <th />}</tr></thead>
             <tbody>
@@ -38,7 +50,7 @@ export default async function Roles({ params }: { params: AppParams }) {
               <label>Name <span className="hint">Keycloak administrative names such as admin are reserved; use e.g. administrator.</span>
                 <input name="name" required maxLength={64} placeholder="editor" />
               </label>
-              <label>Description<input name="description" maxLength={500} /></label>
+              <label>Description<input name="description" maxLength={500} placeholder="Can manage all orders" /></label>
             </ActionForm>
           </Card>
           <Card title="Assign or remove a role">

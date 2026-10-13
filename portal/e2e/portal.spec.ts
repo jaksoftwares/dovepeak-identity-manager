@@ -67,8 +67,8 @@ test("a new developer onboards an application end to end", async ({ page, contex
   expect(await page.content()).not.toContain("eyJ"); // no JWTs in the page
 
   // ---------------------------------------------------------------- Organization and project
-  await page.getByLabel("Name").fill(orgName);
-  await page.getByLabel(/^Slug/).fill(`portal-${suffix}`);
+  // No identifier needed: the API derives it from the name.
+  await page.getByLabel("Name", { exact: true }).fill(orgName);
   await page.getByRole("button", { name: "Create organization" }).click();
   await expect(page).toHaveURL(/\/orgs\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { name: orgName })).toBeVisible();
@@ -77,10 +77,10 @@ test("a new developer onboards an application end to end", async ({ page, contex
 
   await page.getByRole("link", { name: "Projects", exact: true }).click();
   await expect(page).toHaveURL(/\/projects$/);
-  await page.getByLabel("Name").fill("Storefront");
-  await page.getByLabel(/^Slug/).fill("storefront");
+  await page.getByLabel("Name", { exact: true }).fill("Storefront");
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page.getByRole("heading", { name: "Storefront" })).toBeVisible();
+  await expect(page.locator(".page-header .subtitle code")).toHaveText("storefront");
 
   // The workers container provisions the three realms asynchronously.
   await expect(async () => {
@@ -117,14 +117,14 @@ test("a new developer onboards an application end to end", async ({ page, contex
   // ---------------------------------------------------------------- Scope and machine application
   await page.getByRole("link", { name: "API scopes" }).click();
   await expect(page).toHaveURL(/\/scopes$/);
-  await page.getByLabel("Name").fill("orders:read");
+  await page.getByLabel("Name", { exact: true }).fill("orders:read");
   await page.getByLabel("Description").fill("Read orders");
   await page.getByRole("button", { name: "Create scope" }).click();
   await success(page, "orders:read created");
 
   await page.goto(envUrl);
-  await page.getByLabel("Name").fill("order-sync");
-  await page.getByLabel("Type").selectOption("machine");
+  await page.getByLabel("Name", { exact: true }).fill("order-sync");
+  await page.getByRole("radio", { name: /Machine-to-machine/ }).check();
   await page.getByLabel(/^API audiences/).fill("orders-api");
   await page.getByLabel("orders:read").check();
   await page.getByRole("button", { name: "Create application" }).click();
@@ -189,7 +189,7 @@ test("a new developer onboards an application end to end", async ({ page, contex
   await expect(page.getByRole("cell", { name: `colleague-${suffix}@example.test` })).toBeVisible();
 
   await page.goto(`${orgUrl}/api-keys`);
-  await page.getByLabel("Name").fill("ci-deploy");
+  await page.getByLabel("Name", { exact: true }).fill("ci-deploy");
   await page.getByRole("button", { name: "Create key" }).click();
   const apiKey = await oneTimeSecret(page);
   expect(apiKey).toMatch(/^dpk_live_/);

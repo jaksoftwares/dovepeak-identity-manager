@@ -13,7 +13,11 @@ export default async function Settings({ params }: { params: Promise<{ orgId: st
 
   return (
     <>
-      <PageHeader title="Settings" subtitle={<>Organization ID <code>{org.id}</code></>} />
+      <PageHeader title="Settings" subtitle={<>Organization ID <code>{org.id}</code> · identifier <code>{org.slug}</code></>} />
+      <p className="small muted">
+        The organization ID goes in Management API paths, for example <code>/v1/organizations/{org.id}/projects</code>, when you
+        automate with an API key.
+      </p>
       <Card title="Name">
         {owner ? (
           <ActionForm action={renameOrganization.bind(null, orgId)} submitLabel="Save" className="inline" resetOnSuccess={false}>

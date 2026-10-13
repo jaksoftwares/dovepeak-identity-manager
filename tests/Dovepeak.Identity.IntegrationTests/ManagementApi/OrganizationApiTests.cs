@@ -41,6 +41,17 @@ public sealed class OrganizationApiTests(ManagementApiFixture api)
     }
 
     [Fact]
+    public async Task OrganizationWithoutSlug_GetsOneFromItsName()
+    {
+        using var developer = await api.NewDeveloperAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var created = (await developer.PostAsync("/v1/organizations", new { name = $"Acme Labs {suffix}" })).Expect(HttpStatusCode.Created).Json;
+
+        Assert.Equal($"acme-labs-{suffix}", created["slug"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task InvalidInput_ReturnsProblemDetails()
     {
         using var developer = await api.NewDeveloperAsync();

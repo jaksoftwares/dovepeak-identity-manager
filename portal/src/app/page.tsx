@@ -23,6 +23,20 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ e
         <a className="button secondary" href="/api/auth/login?register=1">Create an account</a>
         <a className="button secondary" href="/docs">Read the docs</a>
       </div>
+      <ol className="grid cols-3 how" aria-label="How it works">
+        <li className="card">
+          <strong>1. Register your app</strong>
+          <p className="small">Create a project and tell Dovepeak what your app is: a website, single-page app, mobile app or backend service.</p>
+        </li>
+        <li className="card">
+          <strong>2. Copy a few settings</strong>
+          <p className="small">Paste the issuer and client ID into your code, or use the SDKs for Next.js, React, Node.js and .NET.</p>
+        </li>
+        <li className="card">
+          <strong>3. Your users sign in</strong>
+          <p className="small">Sign-up, email verification, password reset and lockout are handled for you, on pages with your logo.</p>
+        </li>
+      </ol>
     </main>
   );
 }

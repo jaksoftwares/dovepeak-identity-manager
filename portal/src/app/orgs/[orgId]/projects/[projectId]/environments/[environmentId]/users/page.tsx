@@ -1,5 +1,6 @@
 import { revokeUserSessions } from "@/app/actions";
 import { ActionForm } from "@/components/forms";
+import { PageGuide } from "@/components/help";
 import { Card, Empty, When } from "@/components/ui";
 import { envPath, type EndUser, type Session } from "@/lib/api";
 import { attempt } from "@/lib/load";
@@ -18,12 +19,32 @@ export default async function Users({ params, searchParams }: { params: EnvParam
   return (
     <>
       {header}
+      <PageGuide id="users" title="Your end users: where their data lives">
+        <p>
+          These are the people who signed up to <strong>your app</strong> in this environment, not portal members. Dovepeak
+          stores their identity: email address, password hash, verification status and sessions. Your app never handles
+          passwords.
+        </p>
+        <ul>
+          <li>
+            <strong>User ID</strong> is the user&apos;s permanent identifier, the <code>sub</code> claim in every token. Store
+            it in your own database to link your data (orders, profiles, plans) to the user. It never changes, even if the
+            user changes their email address.
+          </li>
+          <li><strong>Verified</strong>: users must confirm their email address before their first sign-in.</li>
+          <li>
+            <strong>Sessions</strong> show where a user is signed in. Revoking them signs the user out everywhere: their
+            apps can no longer refresh tokens, and current access tokens expire within minutes.
+          </li>
+          <li>To give a user a role, copy their user ID and use the Roles tab of the application.</li>
+        </ul>
+      </PageGuide>
       <Card>
         <form className="inline" method="get" style={{ marginBottom: 16 }}>
           <label>Email<input name="email" type="email" defaultValue={email} placeholder="user@example.com" /></label>
           <button type="submit" className="secondary">Search</button>
         </form>
-        {!users.ok ? <p className="muted">{users.message}</p> : users.data.length === 0 ? <Empty>No users found.</Empty> : (
+        {!users.ok ? <p className="muted">{users.message}</p> : users.data.length === 0 ? <Empty>{email ? "No user with this email address." : "No users yet. They appear here after signing up through one of your applications."}</Empty> : (
           <table>
             <thead><tr><th>Email</th><th>User ID</th><th>Verified</th><th>Enabled</th><th>Created</th><th /></tr></thead>
             <tbody>

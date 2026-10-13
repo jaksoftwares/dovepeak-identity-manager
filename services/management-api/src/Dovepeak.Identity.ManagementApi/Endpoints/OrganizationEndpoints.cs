@@ -11,7 +11,8 @@ internal sealed class OrganizationScopedAttribute : Attribute;
 
 internal static class OrganizationEndpoints
 {
-    public sealed record CreateOrganizationRequest(string Slug, string Name);
+    /// <summary>Without a slug, one is derived from the name (and made unique).</summary>
+    public sealed record CreateOrganizationRequest(string? Slug, string Name);
 
     public sealed record RenameRequest(string Name);
 

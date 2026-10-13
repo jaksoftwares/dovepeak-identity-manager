@@ -23,11 +23,15 @@ public sealed class ProjectService(
     IOptions<PlatformOptions> options,
     TimeProvider timeProvider)
 {
-    public async Task<ProjectView> CreateAsync(Guid organizationId, string slug, string name, CancellationToken ct)
+    /// <summary>Creates a project and queues its three environments. Without a slug, one is derived from the name.</summary>
+    public async Task<ProjectView> CreateAsync(Guid organizationId, string? slug, string name, CancellationToken ct)
     {
         await authorizer.AuthorizeAsync(organizationId, Permission.ProjectsWrite, ct);
-        slug = Slug.Validate(slug, nameof(slug));
         name = Slug.ValidateName(name, nameof(name));
+        slug = string.IsNullOrWhiteSpace(slug)
+            ? await Slug.FirstAvailableAsync(name, "project",
+                s => db.Projects.AnyAsync(p => p.OrganizationId == organizationId && p.Slug == s, ct))
+            : Slug.Validate(slug, nameof(slug));
 
         var limit = options.Value.Quotas.ProjectsPerOrganization;
         if (await db.Projects.CountAsync(ct) >= limit)

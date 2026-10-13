@@ -63,6 +63,49 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty">{children}</div>;
 }
 
+export interface Step {
+  title: string;
+  body: ReactNode;
+  /** true: done; false: to do; undefined: the portal cannot tell (e.g. the role cannot read the audit log). */
+  done?: boolean;
+  href?: string;
+  cta?: string;
+}
+
+/** A numbered checklist of next steps; the first unfinished step is highlighted. */
+export function Checklist({ steps }: { steps: Step[] }) {
+  const next = steps.findIndex((s) => s.done === false);
+  return (
+    <ol className="checklist">
+      {steps.map((s, i) => (
+        <li key={s.title} className={s.done ? "done" : i === next ? "next" : undefined}>
+          <span className="marker" aria-hidden="true">{s.done ? "✓" : i + 1}</span>
+          <div>
+            <strong>{s.title}</strong>
+            {s.done && <span className="sr-only"> (done)</span>}
+            <div className="small muted">{s.body}</div>
+            {!s.done && s.href && s.cta && <Link href={s.href} className="small">{s.cta} →</Link>}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Term-and-explanation pairs, for "what does each value mean" panels. */
+export function Explain({ items }: { items: [term: ReactNode, meaning: ReactNode][] }) {
+  return (
+    <dl className="explain">
+      {items.map(([term, meaning], i) => (
+        <div key={i}>
+          <dt>{term}</dt>
+          <dd>{meaning}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 const stateClass: Record<string, string> = {
   ready: "ok", delivered: "ok", active: "ok",
   pending: "warn", deleting: "warn", retrying: "warn",

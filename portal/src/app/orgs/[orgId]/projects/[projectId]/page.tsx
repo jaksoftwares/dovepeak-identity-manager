@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { deleteProject, renameProject } from "@/app/actions";
 import { ActionForm } from "@/components/forms";
-import { Badge, Card, PageHeader, When } from "@/components/ui";
+import { PageGuide } from "@/components/help";
+import { Badge, Card, Explain, PageHeader, When } from "@/components/ui";
 import { orgPath, type Organization, type Project } from "@/lib/api";
 import { can, load } from "@/lib/load";
 
 export const metadata = { title: "Project" };
+
+const PURPOSE: Record<string, string> = {
+  development: "Build and test. Use test accounts; reset freely.",
+  staging: "Rehearse releases with production-like settings.",
+  production: "Your real users. Register your live applications here.",
+};
 
 export default async function ProjectPage({ params }: { params: Promise<{ orgId: string; projectId: string }> }) {
   const { orgId, projectId } = await params;
@@ -17,10 +24,25 @@ export default async function ProjectPage({ params }: { params: Promise<{ orgId:
     <>
       <PageHeader
         title={project.name}
-        subtitle={<>Slug <code>{project.slug}</code></>}
+        subtitle={<>Identifier <code>{project.slug}</code></>}
         crumbs={[{ href: `/orgs/${orgId}/projects`, label: "Projects" }]}
         actions={<Link className="button secondary" href={`/orgs/${orgId}/projects/${projectId}/branding`}>Branding and emails</Link>}
       />
+      <PageGuide id="project" title="Your project's environments">
+        <p>
+          Each environment below is a separate, ready-to-use sign-in service for this product. <strong>Open development to
+          register your first application</strong>, then copy its settings into your code.
+        </p>
+        <Explain
+          items={[
+            ["Environment", "Development, staging or production. Users, applications and settings are not shared between them."],
+            ["State", "pending while Dovepeak sets the environment up (a few seconds), then ready."],
+            ["Issuer", <>The address of this environment&apos;s sign-in service. Your app and APIs are configured with it, and
+              every token it issues names it in the <code>iss</code> claim. Each environment has its own.</>],
+          ]}
+        />
+        <p className="small">The button at the top right sets your logo, colours and email wording for all three environments.</p>
+      </PageGuide>
       {provisioning && (
         <div className="alert warn" role="status">
           Environments are being provisioned. This usually takes a few seconds; refresh to update.
@@ -36,6 +58,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ orgId:
                   {e.state === "ready"
                     ? <Link href={`/orgs/${orgId}/projects/${projectId}/environments/${e.id}`} data-testid={`env-${e.kind}`}>{e.kind}</Link>
                     : e.kind}
+                  <div className="small muted">{PURPOSE[e.kind]}</div>
                 </td>
                 <td><Badge value={e.state} /></td>
                 <td className="mono small">{e.issuer}</td>

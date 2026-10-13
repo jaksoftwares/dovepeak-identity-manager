@@ -7,7 +7,8 @@ namespace Dovepeak.Identity.ManagementApi.Endpoints;
 
 internal static class ProjectEndpoints
 {
-    public sealed record CreateProjectRequest(string Slug, string Name);
+    /// <summary>Without a slug, one is derived from the name (and made unique).</summary>
+    public sealed record CreateProjectRequest(string? Slug, string Name);
 
     public sealed record RenameProjectRequest(string Name);
 

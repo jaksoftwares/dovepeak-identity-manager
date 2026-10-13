@@ -1,0 +1,109 @@
+# Dovepeak Identity edge, production (milestones M2.4, M6.2, M6.5).
+#
+# Same routing and limits as deploy/local/traefik/dynamic.yml, with two differences:
+# * Requests arrive from Caddy (TLS termination), so rate limits key on the client address Caddy forwards
+#   (rightmost X-Forwarded-For entry), not on Caddy's own address.
+# * Keycloak runs as two nodes; the edge balances across them, retries connection failures on the other node and
+#   takes a failed node out of rotation.
+
+http:
+  routers:
+    blocked-admin:
+      rule: "PathPrefix(`/admin`) || PathPrefix(`/realms/master`) || PathPrefix(`/metrics`) || PathPrefix(`/health`)"
+      priority: 1000
+      entryPoints: [public]
+      middlewares: [deny-all]
+      service: noop@internal
+
+    email-sending:
+      rule: "Method(`POST`) && PathRegexp(`^/realms/[a-z0-9-]+/login-actions/(reset-credentials|registration)`)"
+      priority: 900
+      entryPoints: [public]
+      middlewares: [security-headers, ratelimit-email, retry-other-node]
+      service: keycloak
+
+    credentials:
+      rule: "Method(`POST`) && (PathRegexp(`^/realms/[a-z0-9-]+/login-actions/`) || PathRegexp(`^/realms/[a-z0-9-]+/protocol/openid-connect/(token|token/introspect|logout|revoke)$`))"
+      priority: 800
+      entryPoints: [public]
+      middlewares: [security-headers, ratelimit-credentials, retry-other-node]
+      service: keycloak
+
+    public:
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      entryPoints: [public]
+      middlewares: [security-headers, ratelimit-general, retry-other-node]
+      service: keycloak
+
+  middlewares:
+    # A node that has just stopped is taken out of rotation only at the next health check (up to 5 s). Requests that
+    # cannot reach it (connection refused) are retried on the other node. Traefik retries only network errors, never
+    # after a response, so a POST is never processed twice.
+    retry-other-node:
+      retry:
+        attempts: 3
+        initialInterval: 50ms
+
+    deny-all:
+      ipAllowList:
+        sourceRange: ["255.255.255.255/32"]
+
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        referrerPolicy: "no-referrer"
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+
+    ratelimit-email:
+      rateLimit:
+        average: {{ env "EDGE_RATELIMIT_EMAIL_PER_MINUTE" | default "5" }}
+        period: 1m
+        burst: {{ env "EDGE_RATELIMIT_EMAIL_BURST" | default "5" }}
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+        redis:
+          endpoints: ["valkey:6379"]
+          password: {{ env "VALKEY_PASSWORD" | quote }}
+
+    ratelimit-credentials:
+      rateLimit:
+        average: {{ env "EDGE_RATELIMIT_CREDENTIALS_PER_MINUTE" | default "30" }}
+        period: 1m
+        burst: {{ env "EDGE_RATELIMIT_CREDENTIALS_BURST" | default "20" }}
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+        redis:
+          endpoints: ["valkey:6379"]
+          password: {{ env "VALKEY_PASSWORD" | quote }}
+
+    ratelimit-general:
+      rateLimit:
+        average: {{ env "EDGE_RATELIMIT_GENERAL_PER_MINUTE" | default "600" }}
+        period: 1m
+        burst: {{ env "EDGE_RATELIMIT_GENERAL_BURST" | default "200" }}
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+        redis:
+          endpoints: ["valkey:6379"]
+          password: {{ env "VALKEY_PASSWORD" | quote }}
+
+  services:
+    keycloak:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://keycloak-1:8080"
+          - url: "http://keycloak-2:8080"
+        healthCheck:
+          path: /health/ready
+          port: 9000
+          interval: 5s
+          timeout: 3s

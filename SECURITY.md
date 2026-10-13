@@ -48,7 +48,19 @@ Out of scope:
 
 ## Supported Versions
 
+| Version | Security fixes |
+| ------- | -------------- |
+| Latest minor release of the current major version | Yes |
+| Previous minor release | For 3 months after the next minor release |
+| Older releases | No — please upgrade |
+
 Until version 1.0 is released, only the latest commit on `main` receives security fixes.
+
+## How Fixes Are Released
+
+Fixes are developed privately in a GitHub security advisory, released as patch versions for every supported version at the same time, and announced through the advisory, which includes a CVE identifier when released versions are affected. Self-hosting operators should watch the repository's security advisories. The full process is in [docs/release-policy.md](docs/release-policy.md#security-patch-process).
+
+Known limitations that are not vulnerabilities are listed openly in [docs/security/known-limitations.md](docs/security/known-limitations.md).
 
 ## Safe Harbour
 

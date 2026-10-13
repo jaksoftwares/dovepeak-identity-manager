@@ -15,6 +15,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.PORTAL_URL ?? "http://localhost:3100",
     trace: "retain-on-failure",
+    // Rehearsals of the production deployment use Caddy's local CA, which browsers do not trust. Never set in CI.
+    ignoreHTTPSErrors: process.env.PORTAL_E2E_IGNORE_HTTPS_ERRORS === "true",
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

@@ -33,6 +33,24 @@ public sealed class SigningKeyRotationTests
     }
 
     [Fact]
+    public async Task PlannedRotation_RunningSdkResourceServer_AcceptsTheNewKeyWithoutRestart()
+    {
+        // Milestone M6.4: a resource server configured only through the Dovepeak.Identity SDK has the old keys cached.
+        // A token signed by a key it has never seen must make it refetch the JWKS, not fail until a restart.
+        await using var realm = await IsolatedRealm.CreateAsync();
+        var (user, before) = await SignIn.NewUserAsync(realm.Value, realm.Value.WebApp);
+        using var api = new ProtectedApiHost(realm.Value);
+        Assert.Equal(HttpStatusCode.OK, await api.CallMeAsync(before.AccessToken));
+
+        await KeycloakAdmin.KeyRotation.RotateAsync(realm.Value.Name, CancellationToken.None);
+        var after = await SignIn.AsAsync(user, realm.Value.WebApp);
+        Assert.NotEqual(KeyId(before.AccessToken), KeyId(after.AccessToken));
+
+        Assert.Equal(HttpStatusCode.OK, await api.CallMeAsync(after.AccessToken));
+        Assert.Equal(HttpStatusCode.OK, await api.CallMeAsync(before.AccessToken));
+    }
+
+    [Fact]
     public async Task Retirement_RespectsMinimumPassiveAge_ThenRemovesOldKey()
     {
         await using var realm = await IsolatedRealm.CreateAsync();
@@ -56,8 +74,12 @@ public sealed class SigningKeyRotationTests
     {
         await using var realm = await IsolatedRealm.CreateAsync();
         var (user, compromised) = await SignIn.NewUserAsync(realm.Value, realm.Value.WebApp);
+        var publishedBefore = await PublishedKeyIdsAsync(realm.Value);
 
         await KeycloakAdmin.KeyRotation.EmergencyRotateAsync(realm.Value.Name, CancellationToken.None);
+
+        // Every published key is replaced, signing and encryption alike: after a leak all private keys are exposed.
+        Assert.Empty(publishedBefore.Intersect(await PublishedKeyIdsAsync(realm.Value)));
 
         using var refresh = await realm.Value.WebApp.TryRefreshAsync(compromised.RefreshToken!);
         Assert.False(refresh.IsSuccessStatusCode);

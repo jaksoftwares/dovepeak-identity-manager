@@ -13,13 +13,23 @@ public sealed record KeyRotationResult(string NewKeyProviderId, IReadOnlyList<st
 /// <i>passive</i>: still published in JWKS so already-issued tokens validate until they expire.</para>
 /// <para><b>Retirement</b> deletes passive keys once they have been passive longer than the longest access token
 /// lifetime, so no valid token can depend on them.</para>
-/// <para><b>Emergency rotation</b> replaces the RSA signing key and the HMAC key that protects refresh tokens,
-/// deletes the old keys immediately and revokes every session. Every outstanding token becomes invalid.</para>
+/// <para><b>Emergency rotation</b> replaces every generated key of the realm — RSA signing, RSA encryption, the HMAC key
+/// that protects refresh tokens and the AES key — deletes the old keys immediately and revokes every session. Every
+/// outstanding token becomes invalid.</para>
 /// </remarks>
 public sealed class SigningKeyRotationService(KeycloakAdminClient admin, TimeProvider timeProvider)
 {
     private const string RsaProvider = "rsa-generated";
     private const string HmacProvider = "hmac-generated";
+
+    /// <summary>Generated key providers replaced by emergency rotation, with the algorithm of each.</summary>
+    private static readonly Dictionary<string, string?> GeneratedProviders = new(StringComparer.Ordinal)
+    {
+        [RsaProvider] = "RS256",
+        ["rsa-enc-generated"] = "RSA-OAEP",
+        [HmacProvider] = "HS512",
+        ["aes-generated"] = null,
+    };
     private const string PassiveSinceMarker = "-passive-since-";
     private const int PriorityStep = 10;
 
@@ -64,21 +74,26 @@ public sealed class SigningKeyRotationService(KeycloakAdminClient admin, TimePro
     }
 
     /// <summary>
-    /// Compromise response: new RSA and HMAC keys, immediate deletion of all previous ones, and revocation of
-    /// every session. Resource servers must refresh their JWKS cache to stop accepting old access tokens.
+    /// Compromise response: new keys for every generated provider (signing, encryption, HMAC, AES), immediate deletion
+    /// of all previous ones, and revocation of every session. Resource servers must refresh their JWKS cache to stop
+    /// accepting old access tokens.
     /// </summary>
     public async Task<KeyRotationResult> EmergencyRotateAsync(RealmName realm, CancellationToken cancellationToken)
     {
         var providers = await admin.GetKeyProvidersAsync(realm, cancellationToken).ConfigureAwait(false);
-        var compromised = providers.Where(p => ProviderId(p) is RsaProvider or HmacProvider).ToList();
+        var compromised = providers.Where(p => GeneratedProviders.ContainsKey(ProviderId(p))).ToList();
         var stamp = Timestamp();
 
-        var newRsa = await admin.AddGeneratedKeyAsync(
-            realm, RsaProvider, "RS256", $"rsa-{stamp}-emergency",
-            MaxPriority(compromised.Where(p => ProviderId(p) == RsaProvider)) + PriorityStep, cancellationToken).ConfigureAwait(false);
-        await admin.AddGeneratedKeyAsync(
-            realm, HmacProvider, "HS512", $"hmac-{stamp}-emergency",
-            MaxPriority(compromised.Where(p => ProviderId(p) == HmacProvider)) + PriorityStep, cancellationToken).ConfigureAwait(false);
+        // A signing key always exists afterwards, even in a realm that somehow had none; the others are replaced if present.
+        var types = compromised.Select(ProviderId).Append(RsaProvider).Distinct(StringComparer.Ordinal);
+        string? newRsa = null;
+        foreach (var type in types)
+        {
+            var id = await admin.AddGeneratedKeyAsync(
+                realm, type, GeneratedProviders[type], $"{type}-{stamp}-emergency",
+                MaxPriority(compromised.Where(p => ProviderId(p) == type)) + PriorityStep, cancellationToken).ConfigureAwait(false);
+            newRsa = type == RsaProvider ? id : newRsa;
+        }
 
         foreach (var key in compromised)
         {
@@ -87,7 +102,7 @@ public sealed class SigningKeyRotationService(KeycloakAdminClient admin, TimePro
 
         await admin.LogoutAllAsync(realm, cancellationToken).ConfigureAwait(false);
 
-        return new KeyRotationResult(newRsa, compromised.Select(Id).ToList());
+        return new KeyRotationResult(newRsa!, compromised.Select(Id).ToList());
     }
 
     private async Task RenameAsync(RealmName realm, JsonObject key, string name, CancellationToken cancellationToken)

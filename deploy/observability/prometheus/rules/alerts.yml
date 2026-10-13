@@ -40,7 +40,7 @@ groups:
   - name: email
     rules:
       - alert: EmailDeliveryFailing
-        expr: sli:email_failed:ratio_rate10m > 0.05 and sum(increase(dovepeak_email_messages_total{outcome="failed"}[10m])) >= 2
+        expr: sli:email_failed:ratio_rate10m > 0.05 and dovepeak:email_failed:increase10m >= 2
         for: 1m
         labels: { severity: critical, slo: email }
         annotations:
@@ -121,3 +121,28 @@ groups:
         annotations:
           summary: Management API is returning errors
           description: "{{ $value | humanizePercentage }} of Management API requests failed with a 5xx."
+
+  - name: backups
+    rules:
+      - alert: WalArchivingFailing
+        # Every failed archive attempt widens the window of data a restore would lose (RPO 15 minutes).
+        expr: increase(dovepeak_wal_archive_failures_total[10m]) > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: PostgreSQL WAL archiving is failing
+          description: Point-in-time recovery is degrading and pg_wal is growing. Check the backup repository (space, credentials) and the postgres logs. See docs/runbooks/database-failure.md.
+      - alert: BackupStale
+        expr: time() - dovepeak_backup_last_success_timestamp_seconds > 26 * 3600
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: No successful backup for more than 26 hours
+          description: The newest pgBackRest backup is {{ $value | humanizeDuration }} old. Check the pg-backup container logs.
+      - alert: BackupSchedulerDown
+        expr: up{job="backup"} == 0
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: The backup scheduler is not running
+          description: No new backups are being taken. WAL archiving continues as long as PostgreSQL is up.

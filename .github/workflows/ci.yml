@@ -106,8 +106,15 @@ jobs:
       - name: Integration tests
         run: >-
           dotnet test tests/Dovepeak.Identity.IntegrationTests --configuration Release --no-build
+          --filter "Category!=Fuzz"
           --logger trx --results-directory TestResults
           --blame-hang-timeout 15m --blame-hang-dump-type none
+
+      - name: API fuzzing (Schemathesis against the OpenAPI document)
+        run: >-
+          dotnet test tests/Dovepeak.Identity.IntegrationTests --configuration Release --no-build
+          --filter "Category=Fuzz" --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=fuzz.trx" --results-directory TestResults
 
       - name: SDK contract tests against Keycloak
         run: |
@@ -195,6 +202,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate production compose file
+        working-directory: deploy/production
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
       - name: Validate compose file
         run: |
           cp .env.example .env
@@ -228,3 +241,17 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+
+      - name: Build mail relay and production images
+        run: |
+          docker build -f services/mail-relay/Dockerfile -t dovepeak/mail-relay:ci .
+          docker build -f services/workers/Dockerfile -t dovepeak/workers:ci .
+          docker build -f deploy/production/keycloak/Dockerfile -t dovepeak/keycloak:ci .
+          docker build -t dovepeak/postgres:ci deploy/production/postgres
+
+      - name: Scan mail relay and production images for vulnerabilities
+        run: |
+          for image in mail-relay workers keycloak postgres; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.75.0 image \
+              --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --no-progress "dovepeak/$image:ci"
+          done

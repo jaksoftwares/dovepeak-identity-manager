@@ -74,6 +74,11 @@ public sealed partial class RelayMessageStore(IEmailQuota quota, IUpstreamSender
         {
             activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.GetType().Name);
             PlatformTelemetry.EmailMessages.Add(allowed.Count, new KeyValuePair<string, object?>("outcome", "failed"));
+            foreach (var recipient in allowed)
+            {
+                await quota.ReleaseAsync(realm, recipient.Address, CancellationToken.None).ConfigureAwait(false);
+            }
+
             LogUpstreamFailed(logger, ex, realm);
             return new SmtpResponse(TransientFailure, "4.4.1 Upstream temporarily unavailable, try again later");
         }

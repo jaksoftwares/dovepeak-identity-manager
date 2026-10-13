@@ -1,0 +1,54 @@
+# Dovepeak Identity, production TLS termination (milestone M6.5).
+# Caddy obtains and renews certificates automatically (Let's Encrypt / ZeroSSL) for the three hostnames.
+{
+	email {$ACME_EMAIL}
+	# Local rehearsal without public DNS: set CADDY_LOCAL_CERTS=local_certs in .env (Caddy's own CA).
+	{$CADDY_LOCAL_CERTS}
+	servers {
+		# Only this host's network may claim to be a proxy; everyone else's X-Forwarded-For is replaced.
+		trusted_proxies static private_ranges
+	}
+}
+
+(common) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	encode zstd gzip
+	log {
+		output stdout
+		# Query strings carry single-use action tokens: never log them.
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete *
+				}
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+				resp_headers>Set-Cookie delete
+			}
+		}
+	}
+}
+
+# Hosted sign-in, OIDC endpoints and JWKS: through the edge (rate limits, admin paths blocked).
+{$IDENTITY_HOST} {
+	import common
+	reverse_proxy edge:80
+}
+
+# Developer portal.
+{$PORTAL_HOST} {
+	import common
+	reverse_proxy portal:3100
+}
+
+# Management API (OpenAPI at /openapi/v1.json).
+{$API_HOST} {
+	import common
+	@internal path /health/*
+	respond @internal 404
+	reverse_proxy management-api:8080
+}

@@ -626,7 +626,7 @@ public sealed class KeycloakAdminClient(
     /// <summary>Adds a generated key provider (for example "rsa-generated" or "hmac-generated").</summary>
     /// <returns>The new key provider component's ID.</returns>
     public async Task<string> AddGeneratedKeyAsync(
-        RealmName realm, string providerId, string algorithm, string name, long priority, CancellationToken cancellationToken)
+        RealmName realm, string providerId, string? algorithm, string name, long priority, CancellationToken cancellationToken)
     {
         var realmRepresentation = await GetRealmAsync(realm, cancellationToken).ConfigureAwait(false)
             ?? throw new KeycloakAdminException($"Realm '{realm}' not found.");
@@ -636,16 +636,24 @@ public sealed class KeycloakAdminClient(
             ["priority"] = new JsonArray(priority.ToString(CultureInfo.InvariantCulture)),
             ["enabled"] = new JsonArray("true"),
             ["active"] = new JsonArray("true"),
-            ["algorithm"] = new JsonArray(algorithm),
         };
 
-        if (providerId == "rsa-generated")
+        if (algorithm is not null)
+        {
+            config["algorithm"] = new JsonArray(algorithm);
+        }
+
+        if (providerId is "rsa-generated" or "rsa-enc-generated")
         {
             config["keySize"] = new JsonArray("2048");
         }
         else if (providerId == "hmac-generated")
         {
             config["secretSize"] = new JsonArray("64");
+        }
+        else if (providerId == "aes-generated")
+        {
+            config["secretSize"] = new JsonArray("16");
         }
 
         var component = new JsonObject

@@ -1,0 +1,479 @@
+# Dovepeak Identity — production deployment on a single Linux host (milestones M6.2, M6.5).
+#
+#   cd deploy/production && cp .env.example .env   # then set every value marked CHANGE_ME
+#   docker compose up -d --build --wait
+#
+# Guide: docs/self-hosting.md. Only Caddy publishes ports (80, 443); operator UIs bind to 127.0.0.1 and are reached
+# through an SSH tunnel. Keycloak runs as two clustered nodes behind the rate-limiting edge.
+
+name: dovepeak
+
+x-pgbackrest: &pgbackrest
+  # pgBackRest reads its whole configuration from PGBACKREST_* variables (https://pgbackrest.org/configuration.html).
+  PGBACKREST_STANZA: dovepeak
+  # Generated restore_command and archive commands call the wrapper that drops empty PGBACKREST_* variables.
+  PGBACKREST_CMD: /usr/local/bin/pgbackrest
+  PGBACKREST_PG1_PATH: /var/lib/postgresql/data
+  PGBACKREST_PG1_SOCKET_PATH: /var/run/postgresql
+  PGBACKREST_REPO1_TYPE: ${BACKUP_REPO_TYPE:-posix}
+  PGBACKREST_REPO1_PATH: ${BACKUP_REPO_PATH:-/var/lib/pgbackrest}
+  PGBACKREST_REPO1_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+  PGBACKREST_REPO1_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+  PGBACKREST_REPO1_S3_REGION: ${BACKUP_S3_REGION:-}
+  PGBACKREST_REPO1_S3_KEY: ${BACKUP_S3_KEY:-}
+  PGBACKREST_REPO1_S3_KEY_SECRET: ${BACKUP_S3_KEY_SECRET:-}
+  PGBACKREST_REPO1_S3_URI_STYLE: ${BACKUP_S3_URI_STYLE:-host}
+  PGBACKREST_REPO1_CIPHER_TYPE: aes-256-cbc
+  PGBACKREST_REPO1_CIPHER_PASS: ${BACKUP_ENCRYPTION_PASSPHRASE:?Set BACKUP_ENCRYPTION_PASSPHRASE in .env}
+  PGBACKREST_REPO1_RETENTION_FULL: ${BACKUP_RETENTION_FULL:-4}
+  # lz4: fast, and built into the Alpine pgBackRest package (zstd is not).
+  PGBACKREST_COMPRESS_TYPE: lz4
+  PGBACKREST_START_FAST: "y"
+  PGBACKREST_LOG_LEVEL_CONSOLE: info
+  PGBACKREST_LOG_LEVEL_FILE: "off"
+
+x-keycloak: &keycloak
+  image: dovepeak/keycloak:26.7.5
+  restart: unless-stopped
+  stop_grace_period: 45s
+  environment: &keycloak-env
+    KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+    KC_DB_USERNAME: keycloak
+    KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in .env}
+    KC_DB_POOL_MAX_SIZE: "50"
+    KC_HOSTNAME: https://${IDENTITY_HOST:?Set IDENTITY_HOST in .env}
+    # The admin console and admin API are never public: reach them through an SSH tunnel to 127.0.0.1:8081.
+    KC_HOSTNAME_ADMIN: http://localhost:8081
+    KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    KC_HTTP_ENABLED: "true"
+    KC_PROXY_HEADERS: xforwarded
+    # Only the edge may set forwarded headers (known limitation L-09).
+    KC_PROXY_TRUSTED_ADDRESSES: 172.31.0.10/32
+    KC_SPI_EVENTS_LISTENER__EMAIL__EXCLUDE_EVENTS: LOGIN_ERROR,UPDATE_PASSWORD,UPDATE_TOTP,REMOVE_TOTP
+    KC_TRACING_ENDPOINT: http://otel-collector:4317
+    KC_TELEMETRY_SERVICE_NAME: keycloak
+    KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:?Set KEYCLOAK_ADMIN_USERNAME in .env}
+    KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in .env}
+    JAVA_OPTS_KC_HEAP: -XX:MaxRAMPercentage=70
+  depends_on:
+    postgres:
+      condition: service_healthy
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - >-
+        exec 3<>/dev/tcp/127.0.0.1/9000 &&
+        printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+        grep -q '"UP"' <&3
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 60s
+
+x-platform-env: &platform-env
+  ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD:?Set DOVEPEAK_DB_PASSWORD in .env};Maximum Pool Size=30;Timeout=15;Command Timeout=30
+  Keycloak__BaseUrl: http://keycloak:8080
+  Keycloak__HealthUrl: http://keycloak:9000/health/ready
+  Keycloak__ClientId: dovepeak-management
+  Keycloak__ClientSecret: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET:?Set KEYCLOAK_MANAGEMENT_CLIENT_SECRET in .env}
+  Keycloak__Smtp__Host: mail-relay
+  Keycloak__Smtp__Port: "2525"
+  Keycloak__Smtp__StartTls: "false"
+  Keycloak__Smtp__RealmAsUsername: "true"
+  Keycloak__Smtp__Password: ${MAIL_RELAY_PASSWORD:?Set MAIL_RELAY_PASSWORD in .env}
+  Keycloak__Smtp__From: ${MAIL_FROM:?Set MAIL_FROM in .env}
+  Keycloak__Smtp__FromDisplayName: ${MAIL_FROM_NAME:-Dovepeak Identity}
+  Platform__PublicIdentityUrl: https://${IDENTITY_HOST}/
+  Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Set PLATFORM_API_KEY_DIGEST_KEY in .env}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_METRIC_EXPORT_INTERVAL: "15000"
+
+services:
+  # ---------------------------------------------------------------- Entry point
+
+  caddy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+      IDENTITY_HOST: ${IDENTITY_HOST}
+      PORTAL_HOST: ${PORTAL_HOST:?Set PORTAL_HOST in .env}
+      API_HOST: ${API_HOST:?Set API_HOST in .env}
+      CADDY_LOCAL_CERTS: ${CADDY_LOCAL_CERTS:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      frontend:
+        ipv4_address: 172.30.0.5
+    depends_on:
+      edge:
+        condition: service_healthy
+
+  edge:
+    image: traefik:v3.5.3
+    restart: unless-stopped
+    command:
+      - --entrypoints.public.address=:80
+      # Caddy is the only client; it forwards the real client address in X-Forwarded-For.
+      - --entrypoints.public.forwardedHeaders.trustedIPs=172.30.0.5/32
+      - --entrypoints.ping.address=:8082
+      - --ping.entrypoint=ping
+      - --entrypoints.metrics.address=:8083
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entryPoint=metrics
+      - --metrics.prometheus.addRoutersLabels=true
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --api.dashboard=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.format=json
+      - --accesslog.fields.headers.defaultmode=drop
+      - --accesslog.fields.names.RequestPath=drop
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?Set VALKEY_PASSWORD in .env}
+      EDGE_RATELIMIT_EMAIL_PER_MINUTE: ${EDGE_RATELIMIT_EMAIL_PER_MINUTE:-5}
+      EDGE_RATELIMIT_EMAIL_BURST: ${EDGE_RATELIMIT_EMAIL_BURST:-5}
+      EDGE_RATELIMIT_CREDENTIALS_PER_MINUTE: ${EDGE_RATELIMIT_CREDENTIALS_PER_MINUTE:-30}
+      EDGE_RATELIMIT_CREDENTIALS_BURST: ${EDGE_RATELIMIT_CREDENTIALS_BURST:-20}
+      EDGE_RATELIMIT_GENERAL_PER_MINUTE: ${EDGE_RATELIMIT_GENERAL_PER_MINUTE:-600}
+      EDGE_RATELIMIT_GENERAL_BURST: ${EDGE_RATELIMIT_GENERAL_BURST:-200}
+    volumes:
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      frontend:
+        ipv4_address: 172.30.0.10
+      default:
+        ipv4_address: 172.31.0.10
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--entrypoints.ping.address=:8082", "--ping.entrypoint=ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------- Identity engine (two-node cluster)
+
+  keycloak-1:
+    <<: *keycloak
+    # Builds the image once; the second node and the bootstrap job reuse it.
+    build:
+      context: ../..
+      dockerfile: deploy/production/keycloak/Dockerfile
+    hostname: keycloak-1
+    networks:
+      default:
+        aliases: [keycloak]
+    ports:
+      # Admin console and API for operators, through an SSH tunnel only.
+      - "127.0.0.1:8081:8080"
+
+  keycloak-2:
+    <<: *keycloak
+    pull_policy: never
+    hostname: keycloak-2
+    networks:
+      default:
+        aliases: [keycloak]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Start after the first node so the cluster forms from one coordinator.
+      keycloak-1:
+        condition: service_healthy
+
+  keycloak-bootstrap:
+    image: dovepeak/keycloak:26.7.5
+    pull_policy: never
+    entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
+    restart: "no"
+    environment:
+      KEYCLOAK_URL: http://keycloak-1:8080
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      MANAGEMENT_CLIENT_ID: dovepeak-management
+      MANAGEMENT_CLIENT_SECRET: ${KEYCLOAK_MANAGEMENT_CLIENT_SECRET}
+    volumes:
+      - ../../identity/keycloak/bootstrap:/bootstrap:ro
+    depends_on:
+      keycloak-1:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------- Data
+
+  postgres:
+    build:
+      context: ./postgres
+    image: dovepeak/postgres:17.11
+    restart: unless-stopped
+    stop_grace_period: 60s
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=dovepeak archive-push %p
+      # A WAL segment is archived at least every 60 s when there are writes: bounds data loss (RPO 15 min).
+      - -c
+      - archive_timeout=60
+      - -c
+      - max_connections=200
+    environment:
+      <<: *pgbackrest
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env}
+      DOVEPEAK_DB_PASSWORD: ${DOVEPEAK_DB_PASSWORD}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-socket:/var/run/postgresql
+      - backup-repo:/var/lib/pgbackrest
+      - ../local/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  pg-backup:
+    # Schedules full and differential backups; WAL is archived continuously by the postgres service.
+    image: dovepeak/postgres:17.11
+    pull_policy: never
+    restart: unless-stopped
+    user: postgres
+    entrypoint: ["/usr/local/bin/backup-scheduler.sh"]
+    environment:
+      <<: *pgbackrest
+      FULL_BACKUP_DAYS: ${FULL_BACKUP_DAYS:-7}
+      DIFF_BACKUP_HOURS: ${DIFF_BACKUP_HOURS:-24}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-socket:/var/run/postgresql
+      - backup-repo:/var/lib/pgbackrest
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD}", "--appendonly", "yes"]
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a \"$${VALKEY_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  db-migrate:
+    build:
+      context: ../..
+      dockerfile: services/management-api/src/Dovepeak.Identity.Persistence/Dockerfile.migrations
+    restart: "no"
+    command: ["--connection", "Host=postgres;Port=5432;Database=dovepeak;Username=dovepeak;Password=${DOVEPEAK_DB_PASSWORD}"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------- Platform services
+
+  mail-relay:
+    build:
+      context: ../..
+      dockerfile: services/mail-relay/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      ConnectionStrings__Redis: valkey:6379,password=${VALKEY_PASSWORD}
+      Relay__Password: ${MAIL_RELAY_PASSWORD}
+      Upstream__Host: ${SMTP_HOST:?Set SMTP_HOST in .env}
+      Upstream__Port: ${SMTP_PORT:-587}
+      Upstream__StartTls: ${SMTP_STARTTLS:-true}
+      Upstream__Username: ${SMTP_USERNAME:-}
+      Upstream__Password: ${SMTP_PASSWORD:-}
+      Quotas__PerRecipientPerHour: ${MAIL_QUOTA_PER_RECIPIENT_PER_HOUR:-5}
+      Quotas__PerRecipientPerDay: ${MAIL_QUOTA_PER_RECIPIENT_PER_DAY:-20}
+      Quotas__PerTenantPerHour: ${MAIL_QUOTA_PER_TENANT_PER_HOUR:-500}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  management-api:
+    build:
+      context: ../..
+      dockerfile: services/management-api/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks: [frontend, default]
+    environment:
+      <<: *platform-env
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Redis: valkey:6379,password=${VALKEY_PASSWORD},abortConnect=false
+      Platform__PortalRedirectUris__0: https://${PORTAL_HOST}/api/auth/callback
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
+      mail-relay:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  workers:
+    build:
+      context: ../..
+      dockerfile: services/workers/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      <<: *platform-env
+      DOTNET_ENVIRONMENT: Production
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      keycloak-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  portal:
+    build:
+      context: ../../portal
+      args:
+        PLATFORM_ISSUER: https://${IDENTITY_HOST}/realms/dovepeak-platform
+    restart: unless-stopped
+    networks: [frontend, default]
+    environment:
+      PLATFORM_ISSUER: https://${IDENTITY_HOST}/realms/dovepeak-platform
+      PORTAL_CLIENT_ID: dovepeak-portal
+      IDENTITY_INTERNAL_URL: http://keycloak:8080
+      APP_URL: https://${PORTAL_HOST}
+      MANAGEMENT_API_URL: http://management-api:8080
+      SESSION_REDIS_URL: redis://:${VALKEY_PASSWORD}@valkey:6379/2
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
+    depends_on:
+      management-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------- Observability (M6.1)
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+
+  tempo:
+    image: grafana/tempo:2.10.8
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ../observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  prometheus:
+    image: prom/prometheus:v3.13.4
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ../observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ../observability/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    restart: unless-stopped
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ${ALERTMANAGER_CONFIG:-../observability/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.4.12
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+networks:
+  # Caddy and what it serves (edge, portal, Management API). Keycloak is not on it: public traffic reaches the
+  # identity engine only through the edge. Fixed addresses let each hop trust forwarded headers from exactly one peer.
+  frontend:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          # Dynamic addresses from the upper half; the lower half is for the fixed addresses above.
+          ip_range: 172.30.0.128/25
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+          ip_range: 172.31.0.128/25
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  postgres-socket:
+  backup-repo:
+  valkey-data:
+  tempo-data:
+  prometheus-data:
+  grafana-data:

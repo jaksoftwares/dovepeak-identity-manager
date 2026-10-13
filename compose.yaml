@@ -6,7 +6,7 @@ name: dovepeak-identity
 
 services:
   postgres:
-    image: postgres:17.6-alpine
+    image: postgres:17.11-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -41,7 +41,7 @@ services:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD}
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.0
+    image: quay.io/keycloak/keycloak:26.7.5
     restart: unless-stopped
     command: ["start-dev"]
     environment:
@@ -58,7 +58,7 @@ services:
       # Traces go to the OpenTelemetry Collector when the observability profile runs (see .env.example).
       KC_TRACING_ENABLED: ${KC_TRACING_ENABLED:-false}
       KC_TRACING_ENDPOINT: http://otel-collector:4317
-      KC_TRACING_SERVICE_NAME: keycloak
+      KC_TELEMETRY_SERVICE_NAME: keycloak
       # Overlapping client secret rotation (realm template profile "dovepeak-secret-rotation"). A Keycloak preview
       # feature: without it, realm provisioning rejects the template. See ADR-0004 and known limitation L-13.
       KC_FEATURES: client-secret-rotation,user-event-metrics
@@ -99,7 +99,7 @@ services:
 
   keycloak-bootstrap:
     # One-shot job: creates the Management API's least-privilege service account.
-    image: quay.io/keycloak/keycloak:26.4.0
+    image: quay.io/keycloak/keycloak:26.7.5
     entrypoint: ["/bin/bash", "/bootstrap/bootstrap.sh"]
     restart: "no"
     environment:
@@ -194,6 +194,7 @@ services:
       Keycloak__Smtp__RealmAsUsername: "true"
       Keycloak__Smtp__Password: ${MAIL_RELAY_PASSWORD:?Copy .env.example to .env}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
     stop_grace_period: 30s
     depends_on:
       db-migrate:
@@ -224,6 +225,7 @@ services:
       Quotas__PerRecipientPerDay: ${MAIL_QUOTA_PER_RECIPIENT_PER_DAY:-20}
       Quotas__PerTenantPerHour: ${MAIL_QUOTA_PER_TENANT_PER_HOUR:-500}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
     stop_grace_period: 30s
     depends_on:
       valkey:
@@ -258,6 +260,7 @@ services:
       Keycloak__Smtp__RealmAsUsername: "true"
       Keycloak__Smtp__Password: ${MAIL_RELAY_PASSWORD}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
       Platform__PublicIdentityUrl: http://localhost:${KEYCLOAK_HOST_PORT:-8080}/
       Platform__ApiKeyDigestKey: ${PLATFORM_API_KEY_DIGEST_KEY:?Copy .env.example to .env}
       Platform__PortalRedirectUris__0: http://localhost:3100/api/auth/callback
@@ -300,6 +303,7 @@ services:
       SESSION_REDIS_URL: redis://:${VALKEY_PASSWORD}@valkey:6379/2
       # OTLP/HTTP (port 4318) for the Node.js SDK; empty disables tracing.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_HTTP_ENDPOINT:-}
+      OTEL_METRIC_EXPORT_INTERVAL: "15000"
     ports:
       - "127.0.0.1:${PORTAL_HOST_PORT:-3100}:3100"
     depends_on:

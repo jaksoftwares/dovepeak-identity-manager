@@ -4,7 +4,7 @@
 
 Dovepeak Identity gives applications a shared, secure identity platform — registration, login, sessions, tokens, roles and a developer portal — so teams stop rebuilding authentication for every product.
 
-> **Status:** Pre-alpha. Phases 0–4 are complete (Gate G2 awaits the first internal application). Phase 5 (SDKs and developer experience) is implemented: TypeScript and .NET SDKs, examples built on them, and the release pipeline; Gate G3 awaits publishing and the first external beta developers. Not production-ready. See the [implementation plan](implementation-plan.md).
+> **Status:** Release candidate for 1.0. Phases 0–5 are complete; Phase 6 (production readiness) is implemented and rehearsed: observability and SLOs, encrypted point-in-time backups, a two-node Keycloak cluster, runbooks, load testing and API fuzzing, and a production deployment with automatic TLS. Version 1.0 is not tagged until the independent penetration test is done and its critical and high findings are fixed. See the [implementation plan](implementation-plan.md).
 
 ---
 
@@ -19,10 +19,16 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 | [Phase 1 validation report](docs/validation/phase-1-validation-report.md) | Measured results and the identity engine go/no-go |
 | [Threat model](docs/security/threat-model.md)                  | STRIDE threat model and mitigation status       |
 | [Known limitations](docs/security/known-limitations.md)        | Security limitations, stated openly             |
-| [Runbooks](docs/runbooks)                                      | Operational procedures (signing key rotation)   |
+| [Running the application](docs/running-the-application.md)     | Every command to run the full stack, examples and tests |
+| [Self-hosting guide](docs/self-hosting.md)                     | Production deployment on a Linux server         |
+| [Supported flows](docs/supported-flows.md)                     | Flows, defaults and what is deliberately rejected |
+| [Service-level objectives](docs/operations/service-level-objectives.md) | Availability, latency, RPO and RTO targets |
+| [Observability](docs/operations/observability.md)              | Metrics, traces, alerts and drills              |
+| [Runbooks](docs/runbooks)                                      | Database failure, email outage, key rotation and compromise, Keycloak upgrade, tenant sharding |
+| [Release policy](docs/release-policy.md)                       | Versioning, supported versions, security patches |
 | [GitHub repository setup](docs/github-repository-setup.md)     | Branch protection and security settings         |
 
-## Architecture (current)
+## Architecture (local development stack)
 
 ```text
                                        Developers ──▶ Portal (:3100) ──┐
@@ -34,8 +40,13 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
                     │                  │                          ▼
                     └──── Valkey ◀─────┘                     PostgreSQL
                     (rate-limit counters,             (dovepeak + keycloak databases)
-                     BFF and portal sessions)
+                     sessions, email quotas)
+
+ Keycloak ──SMTP──▶ mail relay (quotas, delivery metrics) ──▶ provider (Mailpit locally)
+ Optional: docker compose --profile observability up  (collector, Prometheus, Alertmanager, Tempo, Grafana)
 ```
+
+The production deployment (`deploy/production`) adds Caddy for TLS, a two-node Keycloak cluster and pgBackRest backups; see the [self-hosting guide](docs/self-hosting.md).
 
 ## Repository Layout
 
@@ -43,12 +54,15 @@ Dovepeak Identity gives applications a shared, secure identity platform — regi
 /docs                       ADRs, threat model, runbooks, validation reports
 /services/management-api    Management API, platform services, Keycloak integration library, persistence (EF Core)
 /services/workers           Background workers (outbox, webhooks, reconciliation, audit collection)
+/services/mail-relay        SMTP relay between Keycloak and the email provider: per-recipient and per-tenant quotas
 /identity/keycloak          Realm template, user profile, bootstrap script, login theme
 /examples                   Next.js BFF, React SPA and .NET protected API examples, built on the SDKs
-/tools                      dovepeak-dev CLI (demo setup, scale test, key rotation)
-/deploy                     Local edge and database configuration
-/tests                      Integration tests (.NET) and end-to-end tests (Node)
-/scripts                    CI scripts (log secret scanning)
+/tools                      dovepeak-dev CLI (demo setup, scale test, key rotation, incident drills)
+/deploy/local               Local edge and database configuration
+/deploy/production          Production compose: Caddy, Keycloak cluster, pgBackRest, full observability
+/deploy/observability       OpenTelemetry Collector, Prometheus rules, Alertmanager, Tempo, Grafana dashboards
+/tests                      Integration tests (.NET), end-to-end and failover tests (Node), load tests (k6)
+/scripts                    CI scripts (log secret scanning) and operations scripts (restore drill)
 /portal                     Developer portal (Next.js backend-for-frontend) with built-in documentation
 /sdks/typescript            @dovepeak/identity: OIDC client, Next.js BFF, React hooks, Node.js token verification
 /sdks/dotnet                Dovepeak.Identity: ASP.NET Core authentication, role/scope policies, Management API client
@@ -148,6 +162,10 @@ curl -H "Authorization: Bearer $DOVEPEAK_API_KEY"   http://localhost:5080/v1/org
 | TypeScript SDK contract tests (live Keycloak) | `npm run test:integration -w @dovepeak/identity` | Yes |
 | React SPA end-to-end (Playwright) | `npm run build -w @dovepeak/example-react-spa`, `npm run preview -w …`, then `cd examples/react-spa && npx playwright test` | Yes, plus the example API |
 | Log secret scan | `scripts/ci/scan-logs-for-secrets.sh` | Yes, after running the tests |
+| API fuzzing (Schemathesis against the OpenAPI document) | `dotnet test tests/Dovepeak.Identity.IntegrationTests --filter Category=Fuzz` | Yes (runs Schemathesis in Docker) |
+| Load test (k6: sign-in and refresh through the public edge) | `tests/load/run.sh` | The production stack (`deploy/production`) |
+| Keycloak failover (stop a node; sessions and tokens keep working) | `tests/e2e/ha-failover.sh` | The production stack |
+| Restore drill (point-in-time restore into a scratch copy) | `scripts/ops/restore-drill.sh` | The production stack |
 
 Integration tests provision their own throwaway tenant realms through the production provisioning code and delete them afterwards. The Management API tests host the real API in-process, sign developers in through the real platform realm, and remove every organization they create. `DeployedStackTests` exercises the containerized API and workers with no in-process shortcuts. Every suite runs in CI on each pull request.
 
@@ -170,7 +188,8 @@ dotnet run --project tools/Dovepeak.Identity.DevTool -- <command>
 | ------- | ------- |
 | `demo-setup` | Provision the demo tenant, BFF client and user; write the example's `.env.local` |
 | `scale-test --realms <n>` | Measure provisioning and runtime behaviour as tenant count grows |
-| `rotate-keys`, `retire-keys`, `emergency-rotate-keys` | Signing key operations ([runbook](docs/runbooks/signing-key-rotation.md)) |
+| `rotate-keys`, `retire-keys`, `emergency-rotate-keys [--all]` | Signing key operations ([rotation](docs/runbooks/signing-key-rotation.md), [compromise](docs/runbooks/signing-key-compromise.md)) |
+| `drill-drift --realm <r> --client <c>` | Incident drill: tamper with a client in Keycloak, expect a revert and the `ConfigurationDriftCorrected` alert |
 
 ## Running services outside Docker
 

@@ -17,6 +17,12 @@ public interface IEmailQuota
 {
     /// <summary>Counts one message to <paramref name="recipient"/> from <paramref name="realm"/> and decides whether it may be sent.</summary>
     Task<QuotaDecision> ConsumeAsync(string realm, string recipient, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gives back what <see cref="ConsumeAsync"/> counted when the provider did not accept the message: quotas count
+    /// email that went out, so a provider outage does not leave users throttled once it is over.
+    /// </summary>
+    Task ReleaseAsync(string realm, string recipient, CancellationToken cancellationToken);
 }
 
 /// <summary>Fixed-window counters in Valkey. Fails open: an unreachable cache must not stop verification and recovery mail.</summary>
@@ -29,17 +35,14 @@ public sealed partial class ValkeyEmailQuota(
     public async Task<QuotaDecision> ConsumeAsync(string realm, string recipient, CancellationToken cancellationToken)
     {
         var limits = options.Value;
-        var now = time.GetUtcNow();
-        var hour = now.ToString("yyyyMMddHH", CultureInfo.InvariantCulture);
-        var day = now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-        var account = RecipientKey(realm, recipient);
+        var (tenantKey, hourKey, dayKey) = Keys(realm, recipient);
 
         try
         {
             var db = valkey.GetDatabase();
-            var tenantCount = await IncrementAsync(db, $"mailquota:tenant:{realm}:{hour}", Hour).ConfigureAwait(false);
-            var hourCount = await IncrementAsync(db, $"mailquota:rcpt:{account}:{hour}", Hour).ConfigureAwait(false);
-            var dayCount = await IncrementAsync(db, $"mailquota:rcpt:{account}:d{day}", Day).ConfigureAwait(false);
+            var tenantCount = await IncrementAsync(db, tenantKey, Hour).ConfigureAwait(false);
+            var hourCount = await IncrementAsync(db, hourKey, Hour).ConfigureAwait(false);
+            var dayCount = await IncrementAsync(db, dayKey, Day).ConfigureAwait(false);
 
             if (tenantCount > limits.PerTenantPerHour)
             {
@@ -55,6 +58,36 @@ public sealed partial class ValkeyEmailQuota(
             LogQuotaUnavailable(logger, ex, realm);
             return QuotaDecision.Allowed;
         }
+    }
+
+    public async Task ReleaseAsync(string realm, string recipient, CancellationToken cancellationToken)
+    {
+        var (tenantKey, hourKey, dayKey) = Keys(realm, recipient);
+        try
+        {
+            var db = valkey.GetDatabase();
+            foreach (var key in new[] { tenantKey, hourKey, dayKey })
+            {
+                // Only an existing counter: a window that has rolled over since ConsumeAsync must not go negative.
+                if (await db.KeyExistsAsync(key).ConfigureAwait(false))
+                {
+                    await db.StringDecrementAsync(key).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is RedisException or TimeoutException)
+        {
+            LogQuotaUnavailable(logger, ex, realm);
+        }
+    }
+
+    private (string Tenant, string Hour, string Day) Keys(string realm, string recipient)
+    {
+        var now = time.GetUtcNow();
+        var hour = now.ToString("yyyyMMddHH", CultureInfo.InvariantCulture);
+        var account = RecipientKey(realm, recipient);
+        return ($"mailquota:tenant:{realm}:{hour}", $"mailquota:rcpt:{account}:{hour}",
+            $"mailquota:rcpt:{account}:d{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}");
     }
 
     /// <summary>A stable, non-reversible key for an account: addresses never appear in the cache or the logs.</summary>

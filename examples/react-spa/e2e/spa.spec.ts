@@ -22,13 +22,15 @@ test("a user signs up, calls the API with an in-memory token and signs out", asy
   await page.goto("/");
   await page.getByRole("button", { name: "Create account" }).click();
   await page.locator("#email").fill(email);
-  await page.locator("#password").fill(password);
-  await page.locator("#password-confirm").fill(password);
   await page.locator("#kc-register-form [type=submit]").click();
   await expect(page.getByText(/verify your email/i).first()).toBeVisible();
 
-  // The verification link returns to /callback in the same tab, where the PKCE transaction is waiting.
+  // The verification link leads to choosing a password, then returns to /callback in the same tab, where the PKCE
+  // transaction is waiting.
   await page.goto(await verificationLink(email));
+  await page.locator("#password-new").fill(password);
+  await page.locator("#password-confirm").fill(password);
+  await page.locator("#kc-passwd-update-form [type=submit]").click();
   await expect(page.getByTestId("signed-in")).toContainText(email);
   await expect(page).toHaveURL(/localhost:5173\/$/);
 

@@ -31,17 +31,43 @@ internal static class KeyCommands
 
     public static async Task<int> EmergencyRotateAsync(IServiceProvider services, CommandArgs args)
     {
-        var realm = RealmName.Parse(args.Require("realm"));
         if (!args.Has("confirm"))
         {
             Console.Error.WriteLine("Emergency rotation revokes every session in the realm. Re-run with --confirm.");
             return 2;
         }
 
-        var result = await services.GetRequiredService<SigningKeyRotationService>().EmergencyRotateAsync(realm, CancellationToken.None);
-        Console.WriteLine($"New signing key provider: {result.NewKeyProviderId}");
-        Console.WriteLine($"Deleted compromised key providers: {string.Join(", ", result.DeactivatedKeyProviderIds)}");
-        Console.WriteLine("All sessions revoked. Resource servers must refresh their JWKS cache.");
+        // --all: platform-wide compromise (for example a leaked Keycloak database). The management account only sees the
+        // realms it created, so this covers every tenant realm and the platform realm, never master.
+        var realms = args.Has("all")
+            ? (await services.GetRequiredService<KeycloakAdminClient>().ListRealmNamesAsync(CancellationToken.None)).Select(RealmName.Parse).ToList()
+            : [RealmName.Parse(args.Require("realm"))];
+
+        var rotation = services.GetRequiredService<SigningKeyRotationService>();
+        var failed = new List<string>();
+        foreach (var realm in realms)
+        {
+            try
+            {
+                var result = await rotation.EmergencyRotateAsync(realm, CancellationToken.None);
+                Console.WriteLine($"{realm}: new signing key provider {result.NewKeyProviderId}; deleted {string.Join(", ", result.DeactivatedKeyProviderIds)}");
+            }
+            catch (Exception ex) when (ex is KeycloakAdminException or HttpRequestException)
+            {
+                // Keep going: one unreachable realm must not leave the others on compromised keys.
+                failed.Add(realm.Value);
+                Console.Error.WriteLine($"{realm}: FAILED ({ex.Message})");
+            }
+        }
+
+        Console.WriteLine($"Rotated {realms.Count - failed.Count} of {realms.Count} realm(s); all their sessions are revoked.");
+        Console.WriteLine("Resource servers must refresh their JWKS cache.");
+        if (failed.Count > 0)
+        {
+            Console.Error.WriteLine($"Re-run for: {string.Join(" ", failed)}");
+            return 1;
+        }
+
         return 0;
     }
 }

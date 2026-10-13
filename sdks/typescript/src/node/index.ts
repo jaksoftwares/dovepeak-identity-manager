@@ -76,7 +76,7 @@ export function createTokenVerifier(options: TokenVerifierOptions): TokenVerifie
     if (!keys) {
       const { jwks_uri } = await discover();
       // Keys are cached and refetched when an unknown key ID appears (signing key rotation).
-      keys = jose.createRemoteJWKSet(new URL(jwks_uri), { cooldownDuration: 30_000, cacheMaxAge: 600_000 });
+      keys = jose.createRemoteJWKSet(new URL(jwks_uri), { cooldownDuration: 30_000, cacheMaxAge: 600_000, [jose.customFetch]: doFetch });
     }
 
     return keys;

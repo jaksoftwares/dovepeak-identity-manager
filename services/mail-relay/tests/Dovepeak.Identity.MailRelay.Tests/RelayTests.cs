@@ -85,6 +85,9 @@ public sealed class RelayTests : IAsyncLifetime
 
         var error = await Assert.ThrowsAsync<SmtpCommandException>(() => SendAsync(Realm, Password, "user@example.test"));
         Assert.Equal(451, (int)error.StatusCode);
+
+        // Quotas count email that went out: an outage must not use up the user's recovery emails.
+        Assert.Equal((Realm, "user@example.test"), Assert.Single(_quota.Releases));
     }
 
     [Theory]
@@ -148,6 +151,14 @@ public sealed class RelayTests : IAsyncLifetime
         public ConcurrentQueue<(string Realm, string Recipient)> Calls { get; } = new();
 
         public Func<string, QuotaDecision> Decide { get; set; } = _ => QuotaDecision.Allowed;
+
+        public ConcurrentQueue<(string Realm, string Recipient)> Releases { get; } = new();
+
+        public Task ReleaseAsync(string realm, string recipient, CancellationToken cancellationToken)
+        {
+            Releases.Enqueue((realm, recipient));
+            return Task.CompletedTask;
+        }
 
         public Task<QuotaDecision> ConsumeAsync(string realm, string recipient, CancellationToken cancellationToken)
         {

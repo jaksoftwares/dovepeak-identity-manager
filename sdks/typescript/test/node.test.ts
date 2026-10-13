@@ -1,5 +1,5 @@
 import * as jose from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTokenVerifier, errorResponse, ForbiddenError, hasRoles, hasScopes, requirePermissions, TokenVerificationError } from "../src/node/index.js";
 import { createFakeIssuer } from "./fake-issuer.js";
 
@@ -118,5 +118,30 @@ describe("createTokenVerifier", () => {
     expect(error).toBeInstanceOf(ForbiddenError);
     expect(errorResponse(error).status).toBe(403);
     expect(errorResponse(new TokenVerificationError("expired", "x")).status).toBe(401);
+  });
+
+  it("fetches keys through the injected fetch and picks up a rotated signing key without a restart", async () => {
+    // Milestone M6.4: after planned rotation, tokens carry a key ID the cached JWKS does not know yet.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fake = await createFakeIssuer();
+      const verifier = createTokenVerifier({ issuer: fake.issuer, audience: "orders-api", fetch: fake.fetch });
+      const claims = { sub: "user-1", aud: "orders-api", azp: "app_1" };
+
+      await verifier.verify(await fake.sign(claims));
+      const jwksRequests = () => fake.state.requests.filter((r) => r.url.endsWith("/certs")).length;
+      expect(jwksRequests()).toBe(1);
+
+      // Rotation happens long after the keys were cached; the SDK refetches at most every 30 seconds.
+      const signWithNewKey = await fake.rotate("key-2");
+      vi.setSystemTime(Date.now() + 31_000);
+      await expect(verifier.verify(await signWithNewKey(claims))).resolves.toMatchObject({ subject: "user-1" });
+      expect(jwksRequests()).toBe(2);
+
+      // Tokens signed by the previous key stay valid while it is still published.
+      await expect(verifier.verify(await fake.sign(claims))).resolves.toMatchObject({ subject: "user-1" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

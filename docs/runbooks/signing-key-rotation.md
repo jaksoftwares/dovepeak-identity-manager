@@ -50,7 +50,7 @@ The command only deletes keys that have been passive for at least `--min-age`, s
 
 ## 2. Emergency Rotation
 
-Use when a private signing key or the realm's HMAC key may have been exposed.
+Use when a private signing key or the realm's HMAC key may have been exposed. For a platform-wide compromise use `--all` ([signing-key-compromise.md](signing-key-compromise.md)).
 
 ### 2.1 Decide
 
@@ -64,8 +64,8 @@ dovepeak-dev emergency-rotate-keys --realm <realm> --confirm
 
 This, in order:
 
-1. Creates new RS256 signing and HS512 HMAC keys.
-2. Deletes **all** previous RSA and HMAC keys (no overlap: tokens signed by them must stop working).
+1. Creates new keys for every generated key provider: RS256 signing, RSA-OAEP encryption, HS512 HMAC (refresh tokens) and AES.
+2. Deletes **all** previous ones (no overlap: tokens signed by them must stop working, and a leaked encryption key must not keep decrypting).
 3. Revokes every session in the realm and rejects every token issued before now.
 
 ### 2.3 Force resource servers to drop the old key

@@ -45,19 +45,25 @@ test("a new developer onboards an application end to end", async ({ page, contex
   // ---------------------------------------------------------------- Account and sign-in
   await page.goto("/");
   await page.getByRole("link", { name: "Create an account" }).click();
+  // The password is chosen after the address is verified (protects against account pre-hijacking).
+  await expect(page.locator("#kc-register-form #password")).toHaveCount(0);
   await page.locator("#email").fill(developer.email);
-  await page.locator("#password").fill(developer.password);
-  await page.locator("#password-confirm").fill(developer.password);
   await page.locator("#kc-register-form [type=submit]").click();
   await expect(page.getByText(/verify your email/i).first()).toBeVisible();
 
   await page.goto(await verificationLink(developer.email));
+  await page.locator("#password-new").fill(developer.password);
+  await page.locator("#password-confirm").fill(developer.password);
+  await page.locator("#kc-passwd-update-form [type=submit]").click();
   await expect(page).toHaveURL(/\/orgs$/);
   await expect(page.getByTestId("signed-in-as")).toHaveText(developer.email);
 
-  const cookie = (await context.cookies()).find((c) => c.name === "dp_portal");
+  // Over HTTPS (production) the cookie carries the __Host- prefix: Secure, path "/", no Domain.
+  const https = page.url().startsWith("https:");
+  const cookie = (await context.cookies()).find((c) => c.name === (https ? "__Host-dp_portal" : "dp_portal"));
   expect(cookie?.httpOnly).toBe(true);
   expect(cookie?.sameSite).toBe("Lax");
+  expect(cookie?.secure).toBe(https);
   expect(await page.content()).not.toContain("eyJ"); // no JWTs in the page
 
   // ---------------------------------------------------------------- Organization and project

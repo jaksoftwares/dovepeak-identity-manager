@@ -42,11 +42,19 @@ groups:
       - record: sli:signin_latency:p95_5m
         expr: histogram_quantile(0.95, sum by (le) (rate(traefik_router_request_duration_seconds_bucket{router="credentials@file"}[5m])))
 
-      # ---- Email delivery: share of relayed emails the provider did not accept.
-      - record: sli:email_failed:ratio_rate10m
+      # ---- Email delivery: emails the provider did not accept in the last 10 minutes.
+      # A counter series can first reach Prometheus with a non-zero value (failures before the first export after a
+      # restart); increase() cannot see that jump, so a series younger than the window counts with its full value.
+      - record: dovepeak:email_failed:increase10m
         expr: |
-          sum(rate(dovepeak_email_messages_total{outcome="failed"}[10m]))
-          / clamp_min(sum(rate(dovepeak_email_messages_total{outcome=~"sent|failed"}[10m])), 1e-9)
+          (sum(increase(dovepeak_email_messages_total{outcome="failed"}[10m])) or vector(0))
+          + (sum(dovepeak_email_messages_total{outcome="failed"} unless dovepeak_email_messages_total{outcome="failed"} offset 10m) or vector(0))
+      - record: dovepeak:email_handled:increase10m
+        expr: |
+          (sum(increase(dovepeak_email_messages_total{outcome=~"sent|failed"}[10m])) or vector(0))
+          + (sum(dovepeak_email_messages_total{outcome=~"sent|failed"} unless dovepeak_email_messages_total{outcome=~"sent|failed"} offset 10m) or vector(0))
+      - record: sli:email_failed:ratio_rate10m
+        expr: dovepeak:email_failed:increase10m / clamp_min(dovepeak:email_handled:increase10m, 1)
 
   - name: slo-burn-rate
     rules:

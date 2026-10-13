@@ -9,6 +9,7 @@ export async function createFakeIssuer(options: { issuer?: string; clientId?: st
   const clientId = options.clientId ?? "app_test";
   const { privateKey, publicKey } = await jose.generateKeyPair("RS256", { extractable: true });
   const jwk = { ...(await jose.exportJWK(publicKey)), kid: "key-1", alg: "RS256", use: "sig" };
+  const published = [jwk];
 
   const state = {
     nonce: "",
@@ -59,7 +60,7 @@ export async function createFakeIssuer(options: { issuer?: string; clientId?: st
       });
     }
 
-    if (url.pathname.endsWith("/certs")) return json({ keys: [jwk] });
+    if (url.pathname.endsWith("/certs")) return json({ keys: published });
     if (url.pathname.endsWith("/token/introspect")) return json({ active: state.active });
     if (url.pathname.endsWith("/logout")) return new Response(null, { status: 204 });
     if (url.pathname.endsWith("/token")) {
@@ -71,5 +72,13 @@ export async function createFakeIssuer(options: { issuer?: string; clientId?: st
     return new Response("not found", { status: 404 });
   };
 
-  return { issuer, clientId, fetch, state, sign, jwks: { keys: [jwk] }, privateKey, publicKey, json };
+  /** Signing key rotation: publishes a new key alongside the old one and returns a signer that uses it. */
+  const rotate = async (kid: string) => {
+    const next = await jose.generateKeyPair("RS256", { extractable: true });
+    published.push({ ...(await jose.exportJWK(next.publicKey)), kid, alg: "RS256", use: "sig" });
+    return (claims: jose.JWTPayload) =>
+      new jose.SignJWT(claims).setProtectedHeader({ alg: "RS256", kid, typ: "JWT" }).setIssuer(issuer).setIssuedAt().setExpirationTime("600s").sign(next.privateKey);
+  };
+
+  return { issuer, clientId, fetch, state, sign, rotate, jwks: { keys: [jwk] }, privateKey, publicKey, json };
 }

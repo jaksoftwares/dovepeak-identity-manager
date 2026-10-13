@@ -67,7 +67,7 @@ static int Usage()
               --realm <name>
               --min-age <hh:mm:ss>   (default 00:15:00)
           emergency-rotate-keys   Replace all keys and revoke every session (key compromise)
-              --realm <name>
+              --realm <name> | --all   (--all: every realm the management account administers)
               --confirm           Required
           drill-drift             Incident drill: tamper with a client in Keycloak, expect revert and alert (M6.1)
               --realm <name> --client <clientId>

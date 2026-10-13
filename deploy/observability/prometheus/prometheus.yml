@@ -58,3 +58,10 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox:9115
+
+  # Backup freshness and WAL archiving (production compose only; no target when the service does not exist).
+  - job_name: backup
+    dns_sd_configs:
+      - names: [pg-backup]
+        type: A
+        port: 9187

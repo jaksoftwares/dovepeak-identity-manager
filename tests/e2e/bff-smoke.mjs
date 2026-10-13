@@ -74,7 +74,8 @@ check("app redirects to hosted registration page", registrationHtml.includes("kc
 
 const afterRegister = await follow(formAction(registrationHtml, "kc-register-form", registration.url), {
   method: "POST",
-  body: new URLSearchParams({ email, password, "password-confirm": password }),
+  // No password yet: it is chosen after the address is verified (protects against account pre-hijacking).
+  body: new URLSearchParams({ email }),
 });
 check("registration requires email verification", /verify your email/i.test(await afterRegister.response.text()));
 
@@ -82,8 +83,14 @@ check("registration requires email verification", /verify your email/i.test(awai
 // Matches both Keycloak's default subject and the Dovepeak email theme's ("Verify your email address").
 const mail = await waitForEmail(email, "Verify");
 const link = mail.HTML.match(/href="([^"]*\/login-actions\/action-token[^"]*)"/)[1].replaceAll("&amp;", "&");
-const landed = await follow(link);
-check("verification link returns to the app", landed.url.startsWith(APP), landed.url);
+const passwordPage = await follow(link);
+const passwordHtml = await passwordPage.response.text();
+check("verified user chooses a password", passwordHtml.includes("kc-passwd-update-form"));
+const landed = await follow(formAction(passwordHtml, "kc-passwd-update-form", passwordPage.url), {
+  method: "POST",
+  body: new URLSearchParams({ "password-new": password, "password-confirm": password }),
+});
+check("verification returns to the app", landed.url.startsWith(APP), landed.url);
 check("session cookie is set", cookies.has("dp_session"));
 
 // 3. Session and token handling.

@@ -116,7 +116,7 @@ services:
 
   edge:
     # Public entry point: rate limiting and blocking of administrative paths (deploy/local/traefik/dynamic.yml).
-    image: traefik:v3.5.3
+    image: traefik:v3.7.0
     restart: unless-stopped
     command:
       - --entrypoints.public.address=:80

@@ -1,6 +1,6 @@
 # Build context: repository root (needs Directory.Build.props and .editorconfig).
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0-alpine AS build
 WORKDIR /src
 
 COPY Directory.Build.props Directory.Packages.props .editorconfig ./
